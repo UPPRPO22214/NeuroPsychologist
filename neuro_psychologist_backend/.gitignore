@@ -31,3 +31,20 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Security ###
+# Sensitive configuration files
+application-local.properties
+application-prod.properties
+application-dev.properties
+*.key
+*.pem
+sa-key.json
+secrets/
+.env
+.env.local
+.env.production
+
+### Logs ###
+logs/
+*.log
