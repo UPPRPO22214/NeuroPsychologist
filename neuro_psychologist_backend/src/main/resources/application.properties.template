@@ -1,15 +1,16 @@
 spring.application.name=neuro_psychologist_backend
 
 # AI API Configuration (Yandex GPT)
-# ВАЖНО: Используйте переменные окружения для безопасности!
+# ВАЖНО: Не коммитьте реальные значения в Git!
+# Используйте переменные окружения или application-local.properties
 ai.api.url=https://llm.api.cloud.yandex.net/foundationModels/v1/completion
-ai.api.key=${AI_API_KEY}
-ai.api.model=gpt://${AI_FOLDER_ID}/yandexgpt-lite/latest
+ai.api.key=${AI_API_KEY:YOUR_YANDEX_API_KEY_HERE}
+ai.api.model=gpt://${AI_FOLDER_ID:YOUR_FOLDER_ID}/yandexgpt-lite/latest
 ai.api.max-tokens=1000
 ai.api.temperature=0.7
 
-ai.api.folder-id=${AI_FOLDER_ID}
-ai.api.key-id=${AI_KEY_ID}
+ai.api.folder-id=${AI_FOLDER_ID:YOUR_FOLDER_ID}
+ai.api.key-id=${AI_KEY_ID:YOUR_KEY_ID}
 
 # AI Prompt Configuration
 ai.api.system-prompt=Ты опытный нейропсихолог с многолетним стажем работы. Анализируй текст пользователя и предоставь профессиональную психологическую оценку, основанную на современных методах нейропсихологии. Будь внимательным к деталям и предоставляй конструктивные рекомендации.
