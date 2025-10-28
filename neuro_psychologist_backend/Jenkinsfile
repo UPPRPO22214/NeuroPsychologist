@@ -1,0 +1,252 @@
+pipeline {
+    agent any
+    
+    tools {
+        maven 'Maven-3.9.0' // Adjust version as needed
+        jdk 'JDK-17'        // Java 17 as specified in pom.xml
+    }
+    
+    environment {
+        // Define environment variables
+        MAVEN_OPTS = '-Xmx1024m'
+        JAVA_HOME = tool('JDK-17')
+        PATH = "${JAVA_HOME}/bin:${PATH}"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+            }
+        }
+        
+        stage('Build Info') {
+            steps {
+                echo 'Displaying build information...'
+                sh 'java -version'
+                sh 'mvn -version'
+                sh 'echo "Building neuro_psychologist_backend version: 0.0.1-SNAPSHOT"'
+            }
+        }
+        
+        stage('Clean & Compile') {
+            steps {
+                echo 'Cleaning and compiling the project...'
+                sh 'mvn clean compile'
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                echo 'Running unit tests...'
+                sh 'mvn test'
+            }
+            post {
+                always {
+                    // Publish test results
+                    publishTestResults testResultsPattern: 'target/surefire-reports/*.xml'
+                    
+                    // Archive test reports
+                    archiveArtifacts artifacts: 'target/surefire-reports/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Code Quality Analysis') {
+            parallel {
+                stage('Checkstyle') {
+                    steps {
+                        echo 'Running Checkstyle analysis...'
+                        sh 'mvn checkstyle:check || true'
+                    }
+                }
+                
+                stage('SpotBugs') {
+                    steps {
+                        echo 'Running SpotBugs analysis...'
+                        sh 'mvn spotbugs:check || true'
+                    }
+                }
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                echo 'Packaging the application...'
+                sh 'mvn package -DskipTests'
+            }
+            post {
+                success {
+                    // Archive the built artifacts
+                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                }
+            }
+        }
+        
+        stage('Integration Tests') {
+            steps {
+                echo 'Running integration tests...'
+                sh 'mvn verify -DskipUnitTests'
+            }
+        }
+        
+        stage('Docker Build') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                    branch 'master'
+                }
+            }
+            steps {
+                script {
+                    echo 'Building Docker image...'
+                    def imageName = "neuro-psychologist-backend:${env.BUILD_NUMBER}"
+                    def latestImageName = "neuro-psychologist-backend:latest"
+                    
+                    // Build Docker image
+                    sh """
+                        docker build -t ${imageName} .
+                        docker tag ${imageName} ${latestImageName}
+                    """
+                    
+                    // Store image name for later stages
+                    env.DOCKER_IMAGE = imageName
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                    branch 'master'
+                }
+            }
+            steps {
+                echo 'Running security scans...'
+                // OWASP Dependency Check
+                sh 'mvn org.owasp:dependency-check-maven:check || true'
+                
+                // Docker image security scan (if Trivy is available)
+                script {
+                    if (env.DOCKER_IMAGE) {
+                        sh "trivy image --exit-code 0 --severity HIGH,CRITICAL ${env.DOCKER_IMAGE} || true"
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            when {
+                branch 'develop'
+            }
+            steps {
+                echo 'Deploying to staging environment...'
+                script {
+                    // Add your staging deployment logic here
+                    sh '''
+                        echo "Deploying to staging..."
+                        # Example: kubectl apply -f k8s/staging/
+                        # Or: docker-compose -f docker-compose.staging.yml up -d
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy to Production') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'master'
+                }
+            }
+            steps {
+                echo 'Deploying to production environment...'
+                script {
+                    // Add manual approval for production deployment
+                    input message: 'Deploy to production?', ok: 'Deploy',
+                          submitterParameter: 'DEPLOYER'
+                    
+                    echo "Deployment approved by: ${env.DEPLOYER}"
+                    
+                    // Add your production deployment logic here
+                    sh '''
+                        echo "Deploying to production..."
+                        # Example: kubectl apply -f k8s/production/
+                        # Or: docker-compose -f docker-compose.prod.yml up -d
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline execution completed.'
+            
+            // Clean up workspace
+            cleanWs()
+        }
+        
+        success {
+            echo 'Pipeline executed successfully!'
+            
+            // Send success notification
+            emailext (
+                subject: "✅ Build Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+                body: """
+                    <h2>Build Successful</h2>
+                    <p><strong>Project:</strong> ${env.JOB_NAME}</p>
+                    <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
+                    <p><strong>Build URL:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                    <p><strong>Branch:</strong> ${env.BRANCH_NAME}</p>
+                    <p><strong>Commit:</strong> ${env.GIT_COMMIT}</p>
+                """,
+                mimeType: 'text/html',
+                to: '${DEFAULT_RECIPIENTS}'
+            )
+        }
+        
+        failure {
+            echo 'Pipeline failed!'
+            
+            // Send failure notification
+            emailext (
+                subject: "❌ Build Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+                body: """
+                    <h2>Build Failed</h2>
+                    <p><strong>Project:</strong> ${env.JOB_NAME}</p>
+                    <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
+                    <p><strong>Build URL:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                    <p><strong>Branch:</strong> ${env.BRANCH_NAME}</p>
+                    <p><strong>Commit:</strong> ${env.GIT_COMMIT}</p>
+                    <p><strong>Console Output:</strong> <a href="${env.BUILD_URL}console">${env.BUILD_URL}console</a></p>
+                """,
+                mimeType: 'text/html',
+                to: '${DEFAULT_RECIPIENTS}'
+            )
+        }
+        
+        unstable {
+            echo 'Pipeline is unstable!'
+            
+            // Send unstable notification
+            emailext (
+                subject: "⚠️ Build Unstable: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+                body: """
+                    <h2>Build Unstable</h2>
+                    <p><strong>Project:</strong> ${env.JOB_NAME}</p>
+                    <p><strong>Build Number:</strong> ${env.BUILD_NUMBER}</p>
+                    <p><strong>Build URL:</strong> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                    <p><strong>Branch:</strong> ${env.BRANCH_NAME}</p>
+                    <p><strong>Commit:</strong> ${env.GIT_COMMIT}</p>
+                """,
+                mimeType: 'text/html',
+                to: '${DEFAULT_RECIPIENTS}'
+            )
+        }
+    }
+}
