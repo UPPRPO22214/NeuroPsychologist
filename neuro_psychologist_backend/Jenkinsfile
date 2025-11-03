@@ -86,18 +86,21 @@ pipeline {
                 script {
                     dir('neuro_psychologist_backend') {
                         sh '''
-                            # Создаём директорию для приложения если её нет
-                            sudo mkdir -p /opt/neuropsychologist
-                            sudo chown jenkins:jenkins /opt/neuropsychologist
+                            # Создаём директорию для приложения в домашней папке Jenkins
+                            mkdir -p /var/jenkins_home/apps/neuropsychologist
                             
                             # Останавливаем старый процесс приложения
-                            sudo pkill -f "neuropsychologist" || echo "No running process found"
+                            pkill -f "neuro_psychologist_backend" || echo "No running process found"
+                            
+                            # Ждём завершения старого процесса
+                            sleep 5
                             
                             # Копируем новый JAR файл
-                            cp target/*.jar /opt/neuropsychologist/app.jar
+                            cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
                             
                             # Запускаем приложение в фоне
-                            nohup java -jar /opt/neuropsychologist/app.jar > /opt/neuropsychologist/app.log 2>&1 &
+                            cd /var/jenkins_home/apps/neuropsychologist
+                            nohup java -jar app.jar > app.log 2>&1 &
                             
                             # Ждём запуска приложения
                             echo "Waiting for application to start..."
@@ -110,7 +113,7 @@ pipeline {
                                     break
                                 elif [ $i -eq 10 ]; then
                                     echo "❌ Application failed to start"
-                                    tail -50 /opt/neuropsychologist/app.log
+                                    tail -50 /var/jenkins_home/apps/neuropsychologist/app.log
                                     exit 1
                                 else
                                     echo "Attempt $i: Application not ready yet, waiting..."
@@ -127,7 +130,7 @@ pipeline {
                 }
                 failure {
                     echo '❌ Deployment failed! Check application logs:'
-                    sh 'tail -100 /opt/neuropsychologist/app.log || echo "No log file found"'
+                    sh 'tail -100 /var/jenkins_home/apps/neuropsychologist/app.log || echo "No log file found"'
                 }
             }
         }
