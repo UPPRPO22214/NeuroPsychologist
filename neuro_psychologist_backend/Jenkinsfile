@@ -73,6 +73,64 @@ pipeline {
                 }
             }
         }
+        
+        stage('Deploy Locally') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
+            steps {
+                echo 'Deploying application locally...'
+                script {
+                    dir('neuro_psychologist_backend') {
+                        sh '''
+                            # Создаём директорию для приложения если её нет
+                            sudo mkdir -p /opt/neuropsychologist
+                            sudo chown jenkins:jenkins /opt/neuropsychologist
+                            
+                            # Останавливаем старый процесс приложения
+                            sudo pkill -f "neuropsychologist" || echo "No running process found"
+                            
+                            # Копируем новый JAR файл
+                            cp target/*.jar /opt/neuropsychologist/app.jar
+                            
+                            # Запускаем приложение в фоне
+                            nohup java -jar /opt/neuropsychologist/app.jar > /opt/neuropsychologist/app.log 2>&1 &
+                            
+                            # Ждём запуска приложения
+                            echo "Waiting for application to start..."
+                            sleep 20
+                            
+                            # Проверяем, что приложение запустилось
+                            for i in {1..10}; do
+                                if curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+                                    echo "✅ Application is healthy!"
+                                    break
+                                elif [ $i -eq 10 ]; then
+                                    echo "❌ Application failed to start"
+                                    tail -50 /opt/neuropsychologist/app.log
+                                    exit 1
+                                else
+                                    echo "Attempt $i: Application not ready yet, waiting..."
+                                    sleep 5
+                                fi
+                            done
+                        '''
+                    }
+                }
+            }
+            post {
+                success {
+                    echo '✅ Application successfully deployed and running on http://localhost:8080'
+                }
+                failure {
+                    echo '❌ Deployment failed! Check application logs:'
+                    sh 'tail -100 /opt/neuropsychologist/app.log || echo "No log file found"'
+                }
+            }
+        }
     }
     
     post {
