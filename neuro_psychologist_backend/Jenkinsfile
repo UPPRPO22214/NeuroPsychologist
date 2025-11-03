@@ -11,7 +11,7 @@ pipeline {
                 echo 'Checking out source code...'
                 checkout scm
                 echo 'Making Maven wrapper executable...'
-                sh 'chmod +x ./mvnw'
+                sh 'chmod +x neuro_psychologist_backend/mvnw'
             }
         }
         
@@ -19,7 +19,9 @@ pipeline {
             steps {
                 echo 'Displaying build information...'
                 sh 'java -version'
-                sh './mvnw -version'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw -version'
+                }
                 sh 'echo "Building neuro_psychologist_backend version: 0.0.1-SNAPSHOT"'
             }
         }
@@ -27,26 +29,30 @@ pipeline {
         stage('Clean & Compile') {
             steps {
                 echo 'Cleaning and compiling the project...'
-                sh './mvnw clean compile'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw clean compile'
+                }
             }
         }
         
         stage('Test') {
             steps {
                 echo 'Running unit tests...'
-                sh './mvnw test'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw test'
+                }
             }
             post {
                 always {
                     script {
                         try {
-                            publishTestResults testResultsPattern: 'target/surefire-reports/*.xml'
+                            publishTestResults testResultsPattern: 'neuro_psychologist_backend/target/surefire-reports/*.xml'
                         } catch (Exception e) {
                             echo "Test results not found or could not be published: ${e.getMessage()}"
                         }
                     }
                     
-                    archiveArtifacts artifacts: 'target/surefire-reports/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'neuro_psychologist_backend/target/surefire-reports/**/*', allowEmptyArchive: true
                 }
             }
         }
@@ -54,11 +60,13 @@ pipeline {
         stage('Package') {
             steps {
                 echo 'Packaging the application...'
-                sh './mvnw package -DskipTests'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw package -DskipTests'
+                }
             }
             post {
                 success {
-                    archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                    archiveArtifacts artifacts: 'neuro_psychologist_backend/target/*.jar', fingerprint: true
                 }
             }
         }
@@ -66,8 +74,10 @@ pipeline {
         stage('Verify') {
             steps {
                 echo 'Verifying the build...'
-                sh 'ls -la target/'
-                sh 'file target/*.jar || echo "JAR file verification skipped"'
+                dir('neuro_psychologist_backend') {
+                    sh 'ls -la target/'
+                    sh 'file target/*.jar || echo "JAR file verification skipped"'
+                }
             }
         }
     }
