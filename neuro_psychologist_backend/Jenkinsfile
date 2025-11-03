@@ -86,47 +86,39 @@ pipeline {
                 script {
                     dir('neuro_psychologist_backend') {
                         sh '''
-                            # Создаём директорию для приложения в домашней папке Jenkins
+                            # Создаём директорию для приложения
                             mkdir -p /var/jenkins_home/apps/neuropsychologist
-                            
-                            # Останавливаем старый процесс приложения (более безопасно)
-                            if pgrep -f "neuro_psychologist_backend" > /dev/null; then
-                                echo "Stopping existing application..."
-                                pkill -TERM -f "neuro_psychologist_backend" || true
-                                sleep 3
-                                # Если процесс всё ещё работает, принудительно завершаем
-                                pkill -KILL -f "neuro_psychologist_backend" || true
-                                sleep 2
-                            else
-                                echo "No running application found"
-                            fi
                             
                             # Копируем новый JAR файл
                             cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
                             
-                            # Запускаем приложение в фоне
+                            # Запускаем приложение на случайном порту для избежания конфликтов
                             cd /var/jenkins_home/apps/neuropsychologist
-                            echo "Starting application..."
-                            nohup java -jar app.jar > app.log 2>&1 &
+                            RANDOM_PORT=$((8080 + RANDOM % 100))
+                            echo "Starting application on port $RANDOM_PORT..."
+                            
+                            # Запускаем приложение
+                            java -jar app.jar --server.port=$RANDOM_PORT > app.log 2>&1 &
                             APP_PID=$!
-                            echo "Application started with PID: $APP_PID"
+                            echo "Application started with PID: $APP_PID on port $RANDOM_PORT"
                             
                             # Ждём запуска приложения
                             echo "Waiting for application to start..."
-                            sleep 15
+                            sleep 20
                             
                             # Проверяем, что приложение запустилось
-                            for i in {1..12}; do
-                                if curl -f http://localhost:8080/actuator/health 2>/dev/null; then
-                                    echo "✅ Application is healthy!"
+                            for i in {1..10}; do
+                                if curl -f http://localhost:$RANDOM_PORT/actuator/health 2>/dev/null; then
+                                    echo "✅ Application is healthy on port $RANDOM_PORT!"
+                                    echo "Application URL: http://localhost:$RANDOM_PORT"
                                     exit 0
-                                elif [ $i -eq 12 ]; then
-                                    echo "❌ Application failed to start after 60 seconds"
+                                elif [ $i -eq 10 ]; then
+                                    echo "❌ Application failed to start"
                                     echo "=== Application logs ==="
-                                    tail -50 /var/jenkins_home/apps/neuropsychologist/app.log
+                                    cat /var/jenkins_home/apps/neuropsychologist/app.log
                                     exit 1
                                 else
-                                    echo "Attempt $i/12: Application not ready yet, waiting 5 more seconds..."
+                                    echo "Attempt $i/10: Application not ready yet, waiting..."
                                     sleep 5
                                 fi
                             done
@@ -136,7 +128,7 @@ pipeline {
             }
             post {
                 success {
-                    echo '✅ Application successfully deployed and running on http://localhost:8080'
+                    echo '✅ Application successfully deployed and running on random port'
                 }
                 failure {
                     echo '❌ Deployment failed! Check application logs:'
