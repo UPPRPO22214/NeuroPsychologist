@@ -92,15 +92,20 @@ pipeline {
                             # Копируем новый JAR файл
                             cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
                             
-                            # Запускаем приложение на случайном порту для избежания конфликтов
+                            # Запускаем приложение на фиксированном порту 8081
                             cd /var/jenkins_home/apps/neuropsychologist
-                            RANDOM_PORT=$((8080 + RANDOM % 100))
-                            echo "Starting application on port $RANDOM_PORT..."
+                            echo "Starting application on port 8081..."
                             
-                            # Запускаем приложение
-                            java -jar app.jar --server.port=$RANDOM_PORT > app.log 2>&1 &
+                            # Запускаем приложение с настройками для внешнего доступа
+                            java -jar app.jar \
+                                --server.port=8081 \
+                                --server.address=0.0.0.0 \
+                                --management.endpoints.web.exposure.include=health,info \
+                                --management.endpoint.health.show-details=always \
+                                > app.log 2>&1 &
                             APP_PID=$!
-                            echo "Application started with PID: $APP_PID on port $RANDOM_PORT"
+                            echo "Application started with PID: $APP_PID on port 8081"
+                            echo "External URL: http://158.160.203.252:8081"
                             
                             # Ждём запуска приложения
                             echo "Waiting for application to start..."
@@ -108,9 +113,10 @@ pipeline {
                             
                             # Проверяем, что приложение запустилось
                             for i in {1..10}; do
-                                if curl -f http://localhost:$RANDOM_PORT/actuator/health 2>/dev/null; then
-                                    echo "✅ Application is healthy on port $RANDOM_PORT!"
-                                    echo "Application URL: http://localhost:$RANDOM_PORT"
+                                if curl -f http://localhost:8081/actuator/health 2>/dev/null; then
+                                    echo "✅ Application is healthy on port 8081!"
+                                    echo "🌐 External access: http://158.160.203.252:8081"
+                                    echo "📊 Health check: http://158.160.203.252:8081/actuator/health"
                                     exit 0
                                 elif [ $i -eq 10 ]; then
                                     echo "❌ Application failed to start"
@@ -128,7 +134,9 @@ pipeline {
             }
             post {
                 success {
-                    echo '✅ Application successfully deployed and running on random port'
+                    echo '✅ Application successfully deployed!'
+                    echo '🌐 External URL: http://158.160.203.252:8081'
+                    echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
                 }
                 failure {
                     echo '❌ Deployment failed! Check application logs:'
