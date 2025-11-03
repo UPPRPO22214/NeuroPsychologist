@@ -44,14 +44,7 @@ pipeline {
             }
             post {
                 always {
-                    script {
-                        try {
-                            junit testResultsPattern: 'neuro_psychologist_backend/target/surefire-reports/*.xml'
-                        } catch (Exception e) {
-                            echo "Test results not found or could not be published: ${e.getMessage()}"
-                        }
-                    }
-                    
+                    junit testResults: 'neuro_psychologist_backend/target/surefire-reports/*.xml', allowEmptyResults: true
                     archiveArtifacts artifacts: 'neuro_psychologist_backend/target/surefire-reports/**/*', allowEmptyArchive: true
                 }
             }
