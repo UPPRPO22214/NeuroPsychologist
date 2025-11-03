@@ -10,14 +10,16 @@ pipeline {
             steps {
                 echo 'Checking out source code...'
                 checkout scm
+                echo 'Making Maven wrapper executable...'
+                sh 'chmod +x ./mvnw'
             }
         }
         
         stage('Build Info') {
             steps {
                 echo 'Displaying build information...'
-                sh 'java -version || echo "Java not found in PATH"'
-                sh 'mvn -version || echo "Maven not found in PATH"'
+                sh 'java -version'
+                sh './mvnw -version'
                 sh 'echo "Building neuro_psychologist_backend version: 0.0.1-SNAPSHOT"'
             }
         }
@@ -25,14 +27,14 @@ pipeline {
         stage('Clean & Compile') {
             steps {
                 echo 'Cleaning and compiling the project...'
-                sh 'mvn clean compile'
+                sh './mvnw clean compile'
             }
         }
         
         stage('Test') {
             steps {
                 echo 'Running unit tests...'
-                sh 'mvn test'
+                sh './mvnw test'
             }
             post {
                 always {
@@ -52,7 +54,7 @@ pipeline {
         stage('Package') {
             steps {
                 echo 'Packaging the application...'
-                sh 'mvn package -DskipTests'
+                sh './mvnw package -DskipTests'
             }
             post {
                 success {
