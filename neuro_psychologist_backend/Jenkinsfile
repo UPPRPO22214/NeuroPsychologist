@@ -79,91 +79,28 @@ pipeline {
             }
         }
         
-        stage('Deploy Locally') {
-            steps {
-                echo 'Deploying application locally...'
-                script {
-                    def currentBranch = env.BRANCH_NAME
-                    if (currentBranch == 'main' || currentBranch == 'develop') {
+            stage('Deploy Locally') {
+                steps {
+                    script {
                         dir('neuro_psychologist_backend') {
                             sh '''
-                                mkdir -p /var/jenkins_home/apps/neuropsychologist
+                                # Собираем Docker образ
+                                docker build -t neuroapp .
                                 
-                                echo "Stopping previous application instance..."
-                                pkill -f "app.jar" || echo "No previous instance found"
-                                sleep 3
-                                pkill -9 -f "app.jar" || echo "No process to kill forcefully"
-                                sleep 2
-                                
-                                cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
-                                
-                                cd /var/jenkins_home/apps/neuropsychologist
-                                echo "Starting application on port 8081..."
-                                
-                                export YANDEX_API_KEY="$AI_API_KEY"
-                                export AI_FOLDER_ID="$AI_FOLDER_ID"
-                                export AI_KEY_ID="$AI_KEY_ID"
-                                
-                                # Устанавливаем screen для надежного запуска
-                                apt update && apt install -y screen || echo "Screen installation failed, using nohup"
-                                
-                                # Запускаем в screen сессии
-                                screen -S neuroapp -dm java -jar app.jar \
-                                    --server.port=8081 \
-                                    --server.address=0.0.0.0 \
-                                    --management.endpoints.web.exposure.include=health,info \
-                                    --management.endpoint.health.show-details=always
-                                
-                                echo "Application started in screen session"
-                                sleep 15
-                                
-                                if ps aux | grep app.jar | grep -v grep; then
-                                    echo "✅ Application process is running"
-                                else
-                                    echo "❌ Application process failed to start with screen"
-                                    echo "Trying alternative startup method..."
-                                    
-                                    nohup java -jar app.jar \
-                                        --server.port=8081 \
-                                        --server.address=0.0.0.0 \
-                                        --management.endpoints.web.exposure.include=health,info \
-                                        --management.endpoint.health.show-details=always \
-                                        > app.log 2>&1 &
-                                    
-                                    sleep 10
-                                    if ps aux | grep app.jar | grep -v grep; then
-                                        echo "✅ Application started with nohup"
-                                    else
-                                        echo "❌ All startup methods failed"
-                                        tail -50 app.log
-                                        exit 1
-                                    fi
-                                fi
-                                
-                                echo "Checking application health..."
-                                for i in $(seq 1 10); do
-                                    if curl -f -s http://localhost:8081/api/health > /dev/null; then
-                                        echo "✅ Application API is healthy on port 8081!"
-                                        echo "🌐 External URL: http://158.160.203.252:8081"
-                                        echo "📊 API Health: http://158.160.203.252:8081/api/health"
-                                        echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
-                                        break
-                                    elif [ $i -eq 10 ]; then
-                                        echo "❌ Application not responding after 10 attempts"
-                                        tail -50 app.log
-                                        ps aux | grep app.jar || echo "No app.jar process found"
-                                        netstat -tlnp | grep 8081 || echo "Port 8081 not listening"
-                                        exit 1
-                                    else
-                                        echo "Attempt $i/10: Application not ready yet, waiting..."
-                                        sleep 5
-                                    fi
-                                done
+                                # Запускаем контейнер
+                                docker run -d --name neuroapp \
+                                -p 8081:8081 \
+                                -e YANDEX_API_KEY=$AI_API_KEY \
+                                -e AI_FOLDER_ID=$AI_FOLDER_ID \
+                                -e AI_KEY_ID=$AI_KEY_ID \
+                                neuroapp
                             '''
                         }
-                    } else {
-                        echo "Skipping deployment for branch: ${currentBranch}"
                     }
+                }
+                } else {
+                    echo "Skipping deployment for branch: ${currentBranch}"
+                }
                 }
             }
             post {
