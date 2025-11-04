@@ -112,31 +112,47 @@ pipeline {
                                 export AI_FOLDER_ID="$AI_FOLDER_ID"
                                 export AI_KEY_ID="$AI_KEY_ID"
                                 
-                                # Запускаем приложение в фоне с nohup и сохраняем PID
-                                nohup java -jar app.jar \
+                                # Запускаем приложение с помощью systemd или screen для надежности
+                                # Устанавливаем screen если нет
+                                apt update && apt install -y screen || echo "Screen installation failed, using nohup"
+                                
+                                # Запускаем в screen сессии (будет работать после завершения пайплайна)
+                                screen -S neuroapp -dm java -jar app.jar \
                                     --server.port=8081 \
                                     --server.address=0.0.0.0 \
                                     --management.endpoints.web.exposure.include=health,info \
-                                    --management.endpoint.health.show-details=always \
-                                    > app.log 2>&1 &
-                                APP_PID=$!
-                                echo "Application started with PID: $APP_PID"
+                                    --management.endpoint.health.show-details=always
                                 
-                                # Сохраняем PID для возможности остановки
-                                echo $APP_PID > app.pid
+                                echo "Application started in screen session"
                                 
                                 # Даем приложению время на запуск
                                 echo "Waiting for application to start..."
-                                sleep 10
+                                sleep 15
                                 
                                 # Проверяем что процесс запустился
-                                if ps -p $APP_PID > /dev/null; then
-                                    echo "✅ Application process is running with PID: $APP_PID"
+                                if ps aux | grep app.jar | grep -v grep; then
+                                    echo "✅ Application process is running"
                                 else
                                     echo "❌ Application process failed to start"
-                                    echo "=== Application logs ==="
-                                    tail -50 app.log
-                                    exit 1
+                                    echo "Trying alternative startup method..."
+                                    
+                                    # Альтернативный способ запуска
+                                    nohup java -jar app.jar \
+                                        --server.port=8081 \
+                                        --server.address=0.0.0.0 \
+                                        --management.endpoints.web.exposure.include=health,info \
+                                        --management.endpoint.health.show-details=always \
+                                        > app.log 2>&1 &
+                                    
+                                    sleep 10
+                                    if ps aux | grep app.jar | grep -v grep; then
+                                        echo "✅ Application started with nohup"
+                                    else
+                                        echo "❌ All startup methods failed"
+                                        echo "=== Application logs ==="
+                                        tail -50 app.log
+                                        exit 1
+                                    fi
                                 fi
                                 
                                 # Проверяем доступность приложения
