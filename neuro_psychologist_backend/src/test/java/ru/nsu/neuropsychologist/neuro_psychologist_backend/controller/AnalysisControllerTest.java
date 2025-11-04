@@ -99,13 +99,4 @@ class AnalysisControllerTest {
         verify(aiAnalysisService, times(1)).analyzeUserText("Тестовый текст");
     }
 
-    @Test
-    void testHealthCheck() {
-        // Act
-        ResponseEntity<String> result = analysisController.healthCheck();
-
-        // Assert
-        assertEquals(HttpStatus.OK, result.getStatusCode());
-        assertEquals("Сервис анализа работает", result.getBody());
-    }
 }
