@@ -1,83 +1,200 @@
-stage('Deploy Locally') {
-    when {
-        anyOf {
-            branch 'main'
-            branch 'develop'
+pipeline {
+    agent any
+    
+    environment {
+        MAVEN_OPTS = '-Xmx1024m'
+        // AI API Configuration - установите эти переменные в Jenkins
+        AI_API_KEY = credentials('ai-api-key')
+        AI_FOLDER_ID = credentials('ai-folder-id')
+        AI_KEY_ID = credentials('ai-key-id')
+        SERVER_PORT = '8081'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+                echo 'Making Maven wrapper executable...'
+                sh 'chmod +x neuro_psychologist_backend/mvnw'
+            }
+        }
+        
+        stage('Build Info') {
+            steps {
+                echo 'Displaying build information...'
+                sh 'java -version'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw -version'
+                }
+                sh 'echo "Building neuro_psychologist_backend version: 0.0.1-SNAPSHOT"'
+            }
+        }
+        
+        stage('Clean & Compile') {
+            steps {
+                echo 'Cleaning and compiling the project...'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw clean compile'
+                }
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                echo 'Running unit tests...'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw test'
+                }
+            }
+            post {
+                always {
+                    junit testResults: 'neuro_psychologist_backend/target/surefire-reports/*.xml', allowEmptyResults: true
+                    archiveArtifacts artifacts: 'neuro_psychologist_backend/target/surefire-reports/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                echo 'Packaging the application...'
+                dir('neuro_psychologist_backend') {
+                    sh './mvnw package -DskipTests'
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'neuro_psychologist_backend/target/*.jar', fingerprint: true
+                }
+            }
+        }
+        
+        stage('Verify') {
+            steps {
+                echo 'Verifying the build...'
+                dir('neuro_psychologist_backend') {
+                    sh 'ls -la target/'
+                    sh 'file target/*.jar || echo "JAR file verification skipped"'
+                }
+            }
+        }
+        
+        stage('Deploy Locally') {
+            steps {
+                echo 'Deploying application locally...'
+                script {
+                    // Проверяем ветку через скрипт вместо when
+                    def currentBranch = env.BRANCH_NAME
+                    if (currentBranch == 'main' || currentBranch == 'develop') {
+                        dir('neuro_psychologist_backend') {
+                            sh '''
+                                # Создаём директорию для приложения
+                                mkdir -p /var/jenkins_home/apps/neuropsychologist
+                                
+                                # Останавливаем предыдущий процесс если он запущен
+                                echo "Stopping previous application instance..."
+                                pkill -f "app.jar" || echo "No app.jar process found"
+                                sleep 3
+
+                                # Принудительная остановка если нужно
+                                pkill -9 -f "app.jar" || echo "No app.jar process to kill forcefully"
+                                sleep 2
+                                
+                                # Копируем новый JAR файл
+                                cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
+                                
+                                # Переходим в директорию приложения
+                                cd /var/jenkins_home/apps/neuropsychologist
+                                echo "Starting application on port 8081..."
+                                
+                                # Экспортируем переменные окружения для Java процесса
+                                export YANDEX_API_KEY="$AI_API_KEY"
+                                export AI_FOLDER_ID="$AI_FOLDER_ID"
+                                export AI_KEY_ID="$AI_KEY_ID"
+                                
+                                # Запускаем приложение с переменными окружения в фоне
+                                nohup java -jar app.jar \
+                                    --server.port=8081 \
+                                    --server.address=0.0.0.0 \
+                                    --management.endpoints.web.exposure.include=health,info \
+                                    --management.endpoint.health.show-details=always \
+                                    > app.log 2>&1 &
+                                APP_PID=$!
+                                echo "Application started with PID: $APP_PID on port 8081"
+                                echo "External URL: http://158.160.203.252:8081"
+                                
+                                # Сохраняем PID для возможности остановки
+                                echo $APP_PID > app.pid
+                                
+                                # Ждём запуска приложения
+                                echo "Waiting for application to start..."
+                                sleep 30
+                                
+                                # Проверяем, что приложение запустилось
+                                for i in $(seq 1 15); do
+                                    echo "Attempt $i/15: Checking application health..."
+                                    
+                                    # Сначала проверяем основной endpoint
+                                    if curl -f http://localhost:8081/api/health 2>/dev/null; then
+                                        echo "✅ Application API is healthy on port 8081!"
+                                        echo "🌐 External access: http://158.160.203.252:8081"
+                                        echo "📊 API Health: http://158.160.203.252:8081/api/health"
+                                        echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
+                                        break
+                                    # Если основной endpoint недоступен, проверяем actuator
+                                    elif curl -f http://localhost:8081/actuator/health 2>/dev/null; then
+                                        echo "⚠️ Actuator is healthy but API endpoint may have issues"
+                                        echo "🌐 External access: http://158.160.203.252:8081"
+                                        echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
+                                        break
+                                    elif [ $i -eq 15 ]; then
+                                        echo "❌ Application failed to start properly"
+                                        echo "=== Application logs ==="
+                                        tail -50 /var/jenkins_home/apps/neuropsychologist/app.log
+                                        echo "=== Process status ==="
+                                        ps aux | grep java | grep neuro_psychologist || echo "No java process found"
+                                        exit 1
+                                    else
+                                        echo "Application not ready yet, waiting..."
+                                        sleep 10
+                                    fi
+                                done
+                            '''
+                        }
+                    } else {
+                        echo "Skipping deployment for branch: ${currentBranch}"
+                    }
+                }
+            }
+            post {
+                success {
+                    echo '✅ Application successfully deployed!'
+                    echo '🌐 External URL: http://158.160.203.252:8081'
+                    echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
+                }
+                failure {
+                    echo '❌ Deployment failed! Check application logs:'
+                    sh 'tail -100 /var/jenkins_home/apps/neuropsychologist/app.log || echo "No log file found"'
+                }
+            }
         }
     }
-    steps {
-        echo 'Deploying application locally...'
-        script {
-            dir('neuro_psychologist_backend') {
-                sh '''
-                    # Создаём директорию для приложения
-                    mkdir -p /var/jenkins_home/apps/neuropsychologist
-                    
-                    # Останавливаем предыдущий процесс если он запущен
-                    echo "Stopping previous application instance..."
-                    pkill -f "app.jar" || echo "No app.jar process found"
-                    sleep 3
-
-                    # Принудительная остановка если нужно
-                    pkill -9 -f "app.jar" || echo "No app.jar process to kill forcefully"
-                    sleep 2
-                    
-                    # Копируем новый JAR файл
-                    cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
-                    
-                    # Переходим в директорию приложения
-                    cd /var/jenkins_home/apps/neuropsychologist
-                    echo "Starting application on port 8081..."
-                    
-                    # Запускаем приложение с переменными окружения в фоне
-                    nohup java -jar app.jar \
-                        --server.port=8081 \
-                        --server.address=0.0.0.0 \
-                        --management.endpoints.web.exposure.include=health,info \
-                        --management.endpoint.health.show-details=always \
-                        > app.log 2>&1 &
-                    APP_PID=$!
-                    echo "Application started with PID: $APP_PID on port 8081"
-                    echo "External URL: http://158.160.203.252:8081"
-                    
-                    # Сохраняем PID для возможности остановки
-                    echo $APP_PID > app.pid
-                    
-                    # Ждём запуска приложения
-                    echo "Waiting for application to start..."
-                    sleep 30
-                    
-                    # Проверяем, что приложение запустилось
-                    for i in $(seq 1 15); do
-                        echo "Attempt $i/15: Checking application health..."
-                        
-                        # Сначала проверяем основной endpoint
-                        if curl -f http://localhost:8081/api/health 2>/dev/null; then
-                            echo "✅ Application API is healthy on port 8081!"
-                            echo "🌐 External access: http://158.160.203.252:8081"
-                            echo "📊 API Health: http://158.160.203.252:8081/api/health"
-                            echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
-                            break
-                        # Если основной endpoint недоступен, проверяем actuator
-                        elif curl -f http://localhost:8081/actuator/health 2>/dev/null; then
-                            echo "⚠️ Actuator is healthy but API endpoint may have issues"
-                            echo "🌐 External access: http://158.160.203.252:8081"
-                            echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
-                            break
-                        elif [ $i -eq 15 ]; then
-                            echo "❌ Application failed to start properly"
-                            echo "=== Application logs ==="
-                            tail -50 /var/jenkins_home/apps/neuropsychologist/app.log
-                            echo "=== Process status ==="
-                            ps aux | grep java | grep neuro_psychologist || echo "No java process found"
-                            exit 1
-                        else
-                            echo "Application not ready yet, waiting..."
-                            sleep 10
-                        fi
-                    done
-                '''
-            }
+    
+    post {
+        always {
+            echo 'Pipeline execution completed.'
+        }
+        
+        success {
+            echo '✅ Pipeline executed successfully!'
+        }
+        
+        failure {
+            echo '❌ Pipeline failed! Check the logs for details.'
+        }
+        
+        unstable {
+            echo '⚠️ Pipeline is unstable! Some tests may have failed.'
         }
     }
 }
