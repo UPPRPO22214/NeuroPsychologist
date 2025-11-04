@@ -96,7 +96,7 @@ pipeline {
                             
                             # Останавливаем предыдущий процесс если он запущен
                             echo "Stopping previous application instance..."
-                            pkill -f "neuro_psychologist_backend" || echo "No previous instance found"
+                            timeout 10 pkill -f "neuro_psychologist_backend" || echo "No previous instance found"
                             sleep 5
                             
                             # Копируем новый JAR файл
@@ -129,10 +129,10 @@ pipeline {
                                 echo "Attempt $i/15: Checking application health..."
                                 
                                 # Сначала проверяем основной endpoint
-                                if curl -f http://localhost:8081/api/analysis/health 2>/dev/null; then
+                                if curl -f http://localhost:8081/api/health 2>/dev/null; then
                                     echo "✅ Application API is healthy on port 8081!"
                                     echo "🌐 External access: http://158.160.203.252:8081"
-                                    echo "📊 API Health: http://158.160.203.252:8081/api/analysis/health"
+                                    echo "📊 API Health: http://158.160.203.252:8081/api/health"
                                     echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
                                     break
                                 # Если основной endpoint недоступен, проверяем actuator
