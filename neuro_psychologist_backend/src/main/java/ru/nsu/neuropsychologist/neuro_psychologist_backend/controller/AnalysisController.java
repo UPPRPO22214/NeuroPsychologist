@@ -34,9 +34,4 @@ public class AnalysisController {
             return ResponseEntity.internalServerError().body(response);
         }
     }
-
-    @GetMapping("/health")
-    public ResponseEntity<String> healthCheck() {
-        return ResponseEntity.ok("Сервис анализа работает");
-    }
 }

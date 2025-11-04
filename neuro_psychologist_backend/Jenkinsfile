@@ -3,6 +3,11 @@ pipeline {
     
     environment {
         MAVEN_OPTS = '-Xmx1024m'
+        // AI API Configuration - установите эти переменные в Jenkins
+        AI_API_KEY = credentials('ai-api-key')
+        AI_FOLDER_ID = credentials('ai-folder-id')
+        AI_KEY_ID = credentials('ai-key-id')
+        SERVER_PORT = '8081'
     }
     
     stages {
@@ -89,15 +94,20 @@ pipeline {
                             # Создаём директорию для приложения
                             mkdir -p /var/jenkins_home/apps/neuropsychologist
                             
+                            # Останавливаем предыдущий процесс если он запущен
+                            echo "Stopping previous application instance..."
+                            pkill -f "neuro_psychologist_backend" || echo "No previous instance found"
+                            sleep 5
+                            
                             # Копируем новый JAR файл
                             cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
                             
-                            # Запускаем приложение на фиксированном порту 8081
+                            # Переходим в директорию приложения
                             cd /var/jenkins_home/apps/neuropsychologist
                             echo "Starting application on port 8081..."
                             
                             # Запускаем приложение с настройками для внешнего доступа
-                            java -jar app.jar \
+                            nohup java -jar app.jar \
                                 --server.port=8081 \
                                 --server.address=0.0.0.0 \
                                 --management.endpoints.web.exposure.include=health,info \
@@ -107,25 +117,40 @@ pipeline {
                             echo "Application started with PID: $APP_PID on port 8081"
                             echo "External URL: http://158.160.203.252:8081"
                             
+                            # Сохраняем PID для возможности остановки
+                            echo $APP_PID > app.pid
+                            
                             # Ждём запуска приложения
                             echo "Waiting for application to start..."
-                            sleep 20
+                            sleep 30
                             
                             # Проверяем, что приложение запустилось
-                            for i in {1..10}; do
-                                if curl -f http://localhost:8081/actuator/health 2>/dev/null; then
-                                    echo "✅ Application is healthy on port 8081!"
+                            for i in $(seq 1 15); do
+                                echo "Attempt $i/15: Checking application health..."
+                                
+                                # Сначала проверяем основной endpoint
+                                if curl -f http://localhost:8081/api/analysis/health 2>/dev/null; then
+                                    echo "✅ Application API is healthy on port 8081!"
                                     echo "🌐 External access: http://158.160.203.252:8081"
-                                    echo "📊 Health check: http://158.160.203.252:8081/actuator/health"
-                                    exit 0
-                                elif [ $i -eq 10 ]; then
-                                    echo "❌ Application failed to start"
+                                    echo "📊 API Health: http://158.160.203.252:8081/api/analysis/health"
+                                    echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
+                                    break
+                                # Если основной endpoint недоступен, проверяем actuator
+                                elif curl -f http://localhost:8081/actuator/health 2>/dev/null; then
+                                    echo "⚠️ Actuator is healthy but API endpoint may have issues"
+                                    echo "🌐 External access: http://158.160.203.252:8081"
+                                    echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
+                                    break
+                                elif [ $i -eq 15 ]; then
+                                    echo "❌ Application failed to start properly"
                                     echo "=== Application logs ==="
-                                    cat /var/jenkins_home/apps/neuropsychologist/app.log
+                                    tail -50 /var/jenkins_home/apps/neuropsychologist/app.log
+                                    echo "=== Process status ==="
+                                    ps aux | grep java | grep neuro_psychologist || echo "No java process found"
                                     exit 1
                                 else
-                                    echo "Attempt $i/10: Application not ready yet, waiting..."
-                                    sleep 5
+                                    echo "Application not ready yet, waiting..."
+                                    sleep 10
                                 fi
                             done
                         '''
