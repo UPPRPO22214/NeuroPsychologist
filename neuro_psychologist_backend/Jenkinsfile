@@ -79,28 +79,27 @@ pipeline {
             }
         }
         
-            stage('Deploy Locally') {
-                steps {
-                    script {
-                        dir('neuro_psychologist_backend') {
-                            sh '''
-                                # Собираем Docker образ
-                                docker build -t neuroapp .
-                                
-                                # Запускаем контейнер
-                                docker run -d --name neuroapp \
-                                -p 8081:8081 \
-                                -e YANDEX_API_KEY=$AI_API_KEY \
-                                -e AI_FOLDER_ID=$AI_FOLDER_ID \
-                                -e AI_KEY_ID=$AI_KEY_ID \
-                                neuroapp
-                            '''
-                        }
+        stage('Deploy Locally') {
+            steps {
+                script {
+                    dir('neuro_psychologist_backend') {
+                        sh '''
+                            # Останавливаем и удаляем существующий контейнер если есть
+                            docker stop neuroapp || true
+                            docker rm neuroapp || true
+                            
+                            # Собираем Docker образ
+                            docker build -t neuroapp .
+                            
+                            # Запускаем контейнер
+                            docker run -d --name neuroapp \
+                            -p 8081:8081 \
+                            -e YANDEX_API_KEY=$AI_API_KEY \
+                            -e AI_FOLDER_ID=$AI_FOLDER_ID \
+                            -e AI_KEY_ID=$AI_KEY_ID \
+                            neuroapp
+                        '''
                     }
-                }
-                } else {
-                    echo "Skipping deployment for branch: ${currentBranch}"
-                }
                 }
             }
             post {
@@ -111,7 +110,7 @@ pipeline {
                 }
                 failure {
                     echo '❌ Deployment failed! Check application logs:'
-                    sh 'tail -100 /var/jenkins_home/apps/neuropsychologist/app.log || echo "No log file found"'
+                    sh 'docker logs neuroapp || echo "No container logs found"'
                 }
             }
         }
