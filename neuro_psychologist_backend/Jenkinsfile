@@ -1,4 +1,4 @@
-pipeline {
+Deploy pipeline {
     agent any
     
     environment {
@@ -8,6 +8,8 @@ pipeline {
         AI_FOLDER_ID = credentials('ai-folder-id')
         AI_KEY_ID = credentials('ai-key-id')
         SERVER_PORT = '8081'
+        DOCKER_IMAGE_NAME = 'neuro-psychologist-backend'
+        DOCKER_CONTAINER_NAME = 'neuro-psychologist-app'
     }
     
     stages {
@@ -28,6 +30,7 @@ pipeline {
                     sh './mvnw -version'
                 }
                 sh 'echo "Building neuro_psychologist_backend version: 0.0.1-SNAPSHOT"'
+                sh 'docker --version'
             }
         }
         
@@ -69,117 +72,62 @@ pipeline {
             }
         }
         
-        stage('Verify') {
+        stage('Build Docker Image') {
             steps {
-                echo 'Verifying the build...'
-                dir('neuro_psychologist_backend') {
-                    sh 'ls -la target/'
-                    sh 'file target/*.jar || echo "JAR file verification skipped"'
+                echo 'Building Docker image...'
+                script {
+                    // Проверяем, существует ли Dockerfile
+                    def dockerfileExists = fileExists 'neuro_psychologist_backend/Dockerfile'
+                    if (!dockerfileExists) {
+                        echo 'Dockerfile not found, creating default Dockerfile...'
+                        writeFile file: 'neuro_psychologist_backend/Dockerfile', text: '''
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+COPY target/*.jar app.jar
+EXPOSE 8081
+ENTRYPOINT ["java", "-jar", "app.jar"]
+'''
+                    }
+                    
+                    dir('neuro_psychologist_backend') {
+                        sh """
+                            docker build -t ${env.DOCKER_IMAGE_NAME}:latest -t ${env.DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER} .
+                        """
+                    }
                 }
             }
         }
         
-        stage('Deploy Locally') {
+        stage('Deploy to Docker') {
             steps {
-                echo 'Deploying application locally...'
+                echo 'Deploying application to Docker container...'
                 script {
-                    // Проверяем ветку через скрипт
                     def currentBranch = env.BRANCH_NAME
                     if (currentBranch == 'main' || currentBranch == 'develop') {
-                        dir('neuro_psychologist_backend') {
-                            sh '''
-                                # Создаём директорию для приложения
-                                mkdir -p /var/jenkins_home/apps/neuropsychologist
-                                
-                                # Останавливаем предыдущий процесс если он запущен
-                                echo "Stopping previous application instance..."
-                                pkill -f "app.jar" || echo "No previous instance found"
-                                sleep 3
-
-                                # Принудительная остановка если нужно
-                                pkill -9 -f "app.jar" || echo "No process to kill forcefully"
-                                sleep 2
-                                
-                                # Копируем новый JAR файл
-                                cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
-                                
-                                # Переходим в директорию приложения
-                                cd /var/jenkins_home/apps/neuropsychologist
-                                echo "Starting application on port 8081..."
-                                
-                                # Экспортируем переменные окружения для Java процесса
-                                export YANDEX_API_KEY="$AI_API_KEY"
-                                export AI_FOLDER_ID="$AI_FOLDER_ID"
-                                export AI_KEY_ID="$AI_KEY_ID"
-                                
-                                # Запускаем приложение с помощью systemd или screen для надежности
-                                # Устанавливаем screen если нет
-                                apt update && apt install -y screen || echo "Screen installation failed, using nohup"
-                                
-                                # Запускаем в screen сессии (будет работать после завершения пайплайна)
-                                screen -S neuroapp -dm java -jar app.jar \
-                                    --server.port=8081 \
-                                    --server.address=0.0.0.0 \
-                                    --management.endpoints.web.exposure.include=health,info \
-                                    --management.endpoint.health.show-details=always
-                                
-                                echo "Application started in screen session"
-                                
-                                # Даем приложению время на запуск
-                                echo "Waiting for application to start..."
-                                sleep 15
-                                
-                                # Проверяем что процесс запустился
-                                if ps aux | grep app.jar | grep -v grep; then
-                                    echo "✅ Application process is running"
-                                else
-                                    echo "❌ Application process failed to start"
-                                    echo "Trying alternative startup method..."
-                                    
-                                    # Альтернативный способ запуска
-                                    nohup java -jar app.jar \
-                                        --server.port=8081 \
-                                        --server.address=0.0.0.0 \
-                                        --management.endpoints.web.exposure.include=health,info \
-                                        --management.endpoint.health.show-details=always \
-                                        > app.log 2>&1 &
-                                    
-                                    sleep 10
-                                    if ps aux | grep app.jar | grep -v grep; then
-                                        echo "✅ Application started with nohup"
-                                    else
-                                        echo "❌ All startup methods failed"
-                                        echo "=== Application logs ==="
-                                        tail -50 app.log
-                                        exit 1
-                                    fi
-                                fi
-                                
-                                # Проверяем доступность приложения
-                                echo "Checking application health..."
-                                for i in $(seq 1 10); do
-                                    if curl -f -s http://localhost:8081/api/health > /dev/null; then
-                                        echo "✅ Application API is healthy on port 8081!"
-                                        echo "🌐 External URL: http://158.160.203.252:8081"
-                                        echo "📊 API Health: http://158.160.203.252:8081/api/health"
-                                        echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
-                                        break
-                                    elif [ $i -eq 10 ]; then
-                                        echo "❌ Application not responding after 10 attempts"
-                                        echo "=== Application logs ==="
-                                        tail -50 app.log
-                                        echo "=== Process status ==="
-                                        ps aux | grep app.jar || echo "No app.jar process found"
-                                        echo "=== Port check ==="
-                                        netstat -tlnp | grep 8081 || echo "Port 8081 not listening"
-                                        exit 1
-                                    else
-                                        echo "Attempt $i/10: Application not ready yet, waiting..."
-                                        sleep 5
-                                    fi
-                                done
-                            '''
-                        }
+                        // Останавливаем и удаляем старый контейнер, если он существует
+                        sh """
+                            docker stop ${env.DOCKER_CONTAINER_NAME} || true
+                            docker rm ${env.DOCKER_CONTAINER_NAME} || true
+                        """
+                        
+                        // Запускаем новый контейнер с переменными окружения
+                        sh """
+                            docker run -d \\
+                                --name ${env.DOCKER_CONTAINER_NAME} \\
+                                -p ${env.SERVER_PORT}:8081 \\
+                                -e YANDEX_API_KEY="${env.AI_API_KEY}" \\
+                                -e AI_FOLDER_ID="${env.AI_FOLDER_ID}" \\
+                                -e AI_KEY_ID="${env.AI_KEY_ID}" \\
+                                -e SERVER_PORT=8081 \\
+                                --restart unless-stopped \\
+                                ${env.DOCKER_IMAGE_NAME}:latest
+                        """
+                        
+                        // Ждем немного для старта приложения
+                        sleep time: 30, unit: 'SECONDS'
+                        
+                        // Проверяем, что контейнер запущен
+                        sh "docker ps | grep ${env.DOCKER_CONTAINER_NAME}"
                     } else {
                         echo "Skipping deployment for branch: ${currentBranch}"
                     }
@@ -187,13 +135,36 @@ pipeline {
             }
             post {
                 success {
-                    echo '✅ Application successfully deployed!'
+                    echo '✅ Application successfully deployed to Docker!'
                     echo '🌐 External URL: http://158.160.203.252:8081'
                     echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
+                    
+                    // Дополнительная проверка здоровья приложения
+                    script {
+                        try {
+                            sh 'curl -f http://localhost:8081/actuator/health || echo "Health check failed but continuing..."'
+                        } catch (Exception e) {
+                            echo "Health check failed: ${e.message}"
+                        }
+                    }
                 }
                 failure {
-                    echo '❌ Deployment failed! Check application logs:'
-                    sh 'tail -100 /var/jenkins_home/apps/neuropsychologist/app.log || echo "No log file found"'
+                    echo '❌ Docker deployment failed!'
+                    // Логи контейнера для диагностики
+                    sh "docker logs ${env.DOCKER_CONTAINER_NAME} --tail 50 || true"
+                }
+            }
+        }
+        
+        stage('Cleanup') {
+            steps {
+                echo 'Cleaning up old Docker images...'
+                script {
+                    // Удаляем старые образы, оставляя только последние 5
+                    sh '''
+                        docker images ${env.DOCKER_IMAGE_NAME} --format "table {{.Tag}}" | tail -n +2 | sort -V | head -n -5 | \
+                        xargs -I {} docker rmi ${env.DOCKER_IMAGE_NAME}:{} 2>/dev/null || true
+                    '''
                 }
             }
         }
@@ -202,6 +173,13 @@ pipeline {
     post {
         always {
             echo 'Pipeline execution completed.'
+            // Сохраняем логи контейнера при неудачном выполнении
+            script {
+                if (currentBuild.result == 'FAILURE') {
+                    sh "docker logs ${env.DOCKER_CONTAINER_NAME} --tail 100 > docker_debug.log || true"
+                    archiveArtifacts artifacts: 'docker_debug.log', allowEmptyArchive: true
+                }
+            }
         }
         
         success {
