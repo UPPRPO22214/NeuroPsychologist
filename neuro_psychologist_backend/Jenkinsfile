@@ -96,8 +96,12 @@ pipeline {
                             
                             # Останавливаем предыдущий процесс если он запущен
                             echo "Stopping previous application instance..."
-                            timeout 10 pkill -f "neuro_psychologist_backend" || echo "No previous instance found"
-                            sleep 5
+                            pkill -f "app.jar" || echo "No app.jar process found"
+                            sleep 3
+
+                            # Принудительная остановка если нужно
+                            pkill -9 -f "app.jar" || echo "No app.jar process to kill forcefully"
+                            sleep 2
                             
                             # Копируем новый JAR файл
                             cp target/neuro_psychologist_backend-0.0.1-SNAPSHOT.jar /var/jenkins_home/apps/neuropsychologist/app.jar
