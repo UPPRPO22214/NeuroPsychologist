@@ -83,7 +83,7 @@ pipeline {
             steps {
                 echo 'Deploying application locally...'
                 script {
-                    // Проверяем ветку через скрипт вместо when
+                    // Проверяем ветку через скрипт
                     def currentBranch = env.BRANCH_NAME
                     if (currentBranch == 'main' || currentBranch == 'develop') {
                         dir('neuro_psychologist_backend') {
@@ -93,11 +93,11 @@ pipeline {
                                 
                                 # Останавливаем предыдущий процесс если он запущен
                                 echo "Stopping previous application instance..."
-                                pkill -f "app.jar" || echo "No app.jar process found"
+                                pkill -f "app.jar" || echo "No previous instance found"
                                 sleep 3
 
                                 # Принудительная остановка если нужно
-                                pkill -9 -f "app.jar" || echo "No app.jar process to kill forcefully"
+                                pkill -9 -f "app.jar" || echo "No process to kill forcefully"
                                 sleep 2
                                 
                                 # Копируем новый JAR файл
@@ -112,7 +112,7 @@ pipeline {
                                 export AI_FOLDER_ID="$AI_FOLDER_ID"
                                 export AI_KEY_ID="$AI_KEY_ID"
                                 
-                                # Запускаем приложение с переменными окружения в фоне
+                                # Запускаем приложение в фоне с nohup и сохраняем PID
                                 nohup java -jar app.jar \
                                     --server.port=8081 \
                                     --server.address=0.0.0.0 \
@@ -120,43 +120,46 @@ pipeline {
                                     --management.endpoint.health.show-details=always \
                                     > app.log 2>&1 &
                                 APP_PID=$!
-                                echo "Application started with PID: $APP_PID on port 8081"
-                                echo "External URL: http://158.160.203.252:8081"
+                                echo "Application started with PID: $APP_PID"
                                 
                                 # Сохраняем PID для возможности остановки
                                 echo $APP_PID > app.pid
                                 
-                                # Ждём запуска приложения
+                                # Даем приложению время на запуск
                                 echo "Waiting for application to start..."
-                                sleep 30
+                                sleep 10
                                 
-                                # Проверяем, что приложение запустилось
-                                for i in $(seq 1 15); do
-                                    echo "Attempt $i/15: Checking application health..."
-                                    
-                                    # Сначала проверяем основной endpoint
-                                    if curl -f http://localhost:8081/api/health 2>/dev/null; then
+                                # Проверяем что процесс запустился
+                                if ps -p $APP_PID > /dev/null; then
+                                    echo "✅ Application process is running with PID: $APP_PID"
+                                else
+                                    echo "❌ Application process failed to start"
+                                    echo "=== Application logs ==="
+                                    tail -50 app.log
+                                    exit 1
+                                fi
+                                
+                                # Проверяем доступность приложения
+                                echo "Checking application health..."
+                                for i in $(seq 1 10); do
+                                    if curl -f -s http://localhost:8081/api/health > /dev/null; then
                                         echo "✅ Application API is healthy on port 8081!"
-                                        echo "🌐 External access: http://158.160.203.252:8081"
+                                        echo "🌐 External URL: http://158.160.203.252:8081"
                                         echo "📊 API Health: http://158.160.203.252:8081/api/health"
                                         echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
                                         break
-                                    # Если основной endpoint недоступен, проверяем actuator
-                                    elif curl -f http://localhost:8081/actuator/health 2>/dev/null; then
-                                        echo "⚠️ Actuator is healthy but API endpoint may have issues"
-                                        echo "🌐 External access: http://158.160.203.252:8081"
-                                        echo "📊 Actuator Health: http://158.160.203.252:8081/actuator/health"
-                                        break
-                                    elif [ $i -eq 15 ]; then
-                                        echo "❌ Application failed to start properly"
+                                    elif [ $i -eq 10 ]; then
+                                        echo "❌ Application not responding after 10 attempts"
                                         echo "=== Application logs ==="
-                                        tail -50 /var/jenkins_home/apps/neuropsychologist/app.log
+                                        tail -50 app.log
                                         echo "=== Process status ==="
-                                        ps aux | grep java | grep neuro_psychologist || echo "No java process found"
+                                        ps aux | grep app.jar || echo "No app.jar process found"
+                                        echo "=== Port check ==="
+                                        netstat -tlnp | grep 8081 || echo "Port 8081 not listening"
                                         exit 1
                                     else
-                                        echo "Application not ready yet, waiting..."
-                                        sleep 10
+                                        echo "Attempt $i/10: Application not ready yet, waiting..."
+                                        sleep 5
                                     fi
                                 done
                             '''
