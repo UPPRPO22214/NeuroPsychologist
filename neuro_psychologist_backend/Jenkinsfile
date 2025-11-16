@@ -92,6 +92,7 @@ pipeline {
 
                             # Запускаем контейнер
                             docker run -d --name neuroapp \
+                            --network host
                             -p 8081:8081 \
                             -e YANDEX_API_KEY=$AI_API_KEY \
                             -e AI_FOLDER_ID=$AI_FOLDER_ID \
