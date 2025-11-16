@@ -90,6 +90,7 @@ pipeline {
                             # Запускаем в сетевом режиме host
                             docker run -d --name neuroapp \
                             --network host \
+                            -з 8081:8081 \
                             -e YANDEX_API_KEY=''' + "${env.AI_API_KEY}" + ''' \
                             -e AI_FOLDER_ID=''' + "${env.AI_FOLDER_ID}" + ''' \
                             -e AI_KEY_ID=''' + "${env.AI_KEY_ID}" + ''' \
