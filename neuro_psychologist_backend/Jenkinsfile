@@ -107,8 +107,6 @@ pipeline {
                     echo '✅ Application successfully deployed!'
                     echo '🌐 External URL: http://158.160.203.252:8081'
                     echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
-
-                    # Ждем запуска приложения и проверяем health
                     sh '''
                         sleep 10
                         curl -f http://localhost:8081/actuator/health || echo "Health check failed"
