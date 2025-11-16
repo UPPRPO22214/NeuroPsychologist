@@ -90,12 +90,12 @@ pipeline {
                             # Собираем Docker образ
                             docker build -t neuroapp .
 
-                            # Запускаем контейнер
+                            # Запускаем контейнер с правильной передачей переменных
                             docker run -d --name neuroapp \
                             -p 8081:8081 \
-                            -e YANDEX_API_KEY=$AI_API_KEY \
-                            -e AI_FOLDER_ID=$AI_FOLDER_ID \
-                            -e AI_KEY_ID=$AI_KEY_ID \
+                            -e YANDEX_API_KEY=''' + "${env.AI_API_KEY}" + ''' \
+                            -e AI_FOLDER_ID=''' + "${env.AI_FOLDER_ID}" + ''' \
+                            -e AI_KEY_ID=''' + "${env.AI_KEY_ID}" + ''' \
                             neuroapp
                         '''
                     }
@@ -113,7 +113,6 @@ pipeline {
                 }
             }
         }
-    }
 
     post {
         always {
