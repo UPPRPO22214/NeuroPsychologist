@@ -105,7 +105,6 @@ pipeline {
                     echo '🌐 External URL: http://158.160.203.252:8081'
                     echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
 
-                    # Проверяем с внешнего адреса
                     sh '''
                         sleep 15
                         curl -f http://158.160.203.252:8081/actuator/health || echo "Health check failed"
