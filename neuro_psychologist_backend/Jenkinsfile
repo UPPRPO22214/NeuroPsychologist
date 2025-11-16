@@ -92,12 +92,13 @@ pipeline {
 
                             # Запускаем контейнер
                             docker run -d --name neuroapp \
-                            --network host
-                            -p 8081:8081 \
-                            -e YANDEX_API_KEY=$AI_API_KEY \
-                            -e AI_FOLDER_ID=$AI_FOLDER_ID \
-                            -e AI_KEY_ID=$AI_KEY_ID \
-                            neuroapp
+                                -p 8082:8081 \
+                                -e AI_API_KEY=$AI_API_KEY \
+                                -e AI_FOLDER_ID=$AI_FOLDER_ID \
+                                -e AI_KEY_ID=$AI_KEY_ID \
+                                -e SERVER_PORT=8081 \
+                                --restart unless-stopped \
+                                neuroapp
                         '''
                     }
                 }
@@ -105,8 +106,9 @@ pipeline {
             post {
                 success {
                     echo '✅ Application successfully deployed!'
-                    echo '🌐 External URL: http://158.160.203.252:8081'
-                    echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
+                    echo '🌐 External URL: http://158.160.203.252:8082'
+                    echo '📊 Health check: http://158.160.203.252:8082/actuator/health'
+                    echo '🔍 API Analysis: http://158.160.203.252:8082/api/analysis'
                 }
                 failure {
                     echo '❌ Deployment failed! Check application logs:'
