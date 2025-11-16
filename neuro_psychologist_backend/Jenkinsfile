@@ -3,13 +3,12 @@ pipeline {
     
     environment {
         MAVEN_OPTS = '-Xmx1024m'
-        // AI API Configuration - установите эти переменные в Jenkins
         AI_API_KEY = credentials('ai-api-key')
         AI_FOLDER_ID = credentials('ai-folder-id')
         AI_KEY_ID = credentials('ai-key-id')
         SERVER_PORT = '8081'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
@@ -19,7 +18,7 @@ pipeline {
                 sh 'chmod +x neuro_psychologist_backend/mvnw'
             }
         }
-        
+
         stage('Build Info') {
             steps {
                 echo 'Displaying build information...'
@@ -30,7 +29,7 @@ pipeline {
                 sh 'echo "Building neuro_psychologist_backend version: 0.0.1-SNAPSHOT"'
             }
         }
-        
+
         stage('Clean & Compile') {
             steps {
                 echo 'Cleaning and compiling the project...'
@@ -39,7 +38,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Test') {
             steps {
                 echo 'Running unit tests...'
@@ -54,7 +53,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Package') {
             steps {
                 echo 'Packaging the application...'
@@ -68,7 +67,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Verify') {
             steps {
                 echo 'Verifying the build...'
@@ -78,7 +77,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Deploy Locally') {
             steps {
                 script {
@@ -87,10 +86,10 @@ pipeline {
                             # Останавливаем и удаляем существующий контейнер если есть
                             docker stop neuroapp || true
                             docker rm neuroapp || true
-                            
+
                             # Собираем Docker образ
                             docker build -t neuroapp .
-                            
+
                             # Запускаем контейнер
                             docker run -d --name neuroapp \
                             -p 8081:8081 \
@@ -115,7 +114,7 @@ pipeline {
             }
         }
     }
-    
+
     post {
         always {
             echo 'Pipeline execution completed.'
