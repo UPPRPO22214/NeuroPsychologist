@@ -83,20 +83,17 @@ pipeline {
                 script {
                     dir('neuro_psychologist_backend') {
                         sh '''
-                            # Останавливаем и удаляем существующий контейнер если есть
                             docker stop neuroapp || true
                             docker rm neuroapp || true
-
-                            # Собираем Docker образ
                             docker build -t neuroapp .
 
-                            # Запускаем контейнер с правильной передачей переменных и портов
+                            # Запускаем в сетевом режиме host
                             docker run -d --name neuroapp \
-                            -p 8081:8081 \
+                            --network host \
                             -e YANDEX_API_KEY=''' + "${env.AI_API_KEY}" + ''' \
                             -e AI_FOLDER_ID=''' + "${env.AI_FOLDER_ID}" + ''' \
                             -e AI_KEY_ID=''' + "${env.AI_KEY_ID}" + ''' \
-                            -e SERVER_PORT=''' + "${env.SERVER_PORT}" + ''' \
+                            -e SERVER_PORT=8081 \
                             neuroapp
                         '''
                     }
@@ -107,14 +104,12 @@ pipeline {
                     echo '✅ Application successfully deployed!'
                     echo '🌐 External URL: http://158.160.203.252:8081'
                     echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
+
+                    # Проверяем с внешнего адреса
                     sh '''
-                        sleep 10
-                        curl -f http://localhost:8081/actuator/health || echo "Health check failed"
+                        sleep 15
+                        curl -f http://158.160.203.252:8081/actuator/health || echo "Health check failed"
                     '''
-                }
-                failure {
-                    echo '❌ Deployment failed! Check application logs:'
-                    sh 'docker logs neuroapp || echo "No container logs found"'
                 }
             }
         }
