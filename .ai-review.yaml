@@ -1,0 +1,98 @@
+# AI Review Configuration for NeuroPsychologist Project
+# This configuration enables automated code review using AI for Pull Requests
+
+llm:
+  provider: OPENROUTER              # Using OpenRouter as LLM provider
+  
+  meta:
+    model: mistralai/mistral-7b-instruct:free  # Free model via OpenRouter
+    max_tokens: 15000              # Maximum tokens in response
+    temperature: 0.3               # Lower value = stricter responses
+  
+  http_client:
+    timeout: 120
+    api_url: https://openrouter.ai/api/v1      # OpenRouter API base URL
+
+vcs:
+  provider: GITHUB                # Using GitHub as version control system
+  
+  http_client:
+    timeout: 120
+    api_url: https://api.github.com            # GitHub API URL
+
+# Review configuration
+review:
+  # Focus areas for code review
+  focus_areas:
+    - security
+    - performance
+    - code_quality
+    - best_practices
+    - testing
+  
+  # File patterns to include in review
+  include_patterns:
+    - "**/*.java"
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.css"
+  
+  # File patterns to exclude from review
+  exclude_patterns:
+    - "**/node_modules/**"
+    - "**/target/**"
+    - "**/build/**"
+    - "**/dist/**"
+    - "**/*.min.js"
+    - "**/*.min.css"
+    - "**/package-lock.json"
+    - "**/pom.xml"
+  
+  # Review style
+  style:
+    tone: constructive           # Constructive and helpful tone
+    detail_level: moderate       # Moderate level of detail
+    max_comments: 10            # Maximum number of inline comments per PR
+  
+  # Language-specific settings
+  languages:
+    java:
+      focus:
+        - spring_boot_best_practices
+        - security_vulnerabilities
+        - exception_handling
+        - null_safety
+    
+    typescript:
+      focus:
+        - react_best_practices
+        - type_safety
+        - component_structure
+        - hooks_usage
+
+# Custom prompts (optional)
+prompts:
+  system: |
+    You are an experienced software engineer reviewing code for the NeuroPsychologist project.
+    This is a mental health AI assistant application built with Spring Boot backend and React frontend.
+    
+    Focus on:
+    - Security best practices (especially for user data and authentication)
+    - Code quality and maintainability
+    - Performance optimizations
+    - Proper error handling
+    - Testing coverage
+    
+    Provide constructive feedback that helps developers improve their code.
+    Be specific and include code examples when suggesting improvements.
+  
+  inline_comment: |
+    Review this code change and provide specific, actionable feedback.
+    If you find issues, suggest concrete improvements with code examples.
+  
+  summary: |
+    Provide a brief summary of the overall code quality in this PR.
+    Highlight the main strengths and areas for improvement.
+    Keep it concise and actionable.
