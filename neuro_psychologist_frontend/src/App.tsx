@@ -1,10 +1,9 @@
-import WelcomePage from "./pages/welcome-page.tsx";
+import AppRouter from "./components/Router";
 
 function App() {
-
   return (
-      <WelcomePage/>
-  )
+    <AppRouter />
+  );
 }
 
-export default App
+export default App;

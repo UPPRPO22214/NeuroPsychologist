@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
     isAuthenticated?: boolean;
@@ -11,6 +12,7 @@ const Header: React.FC<HeaderProps> = ({
     userAvatar = "https://lh3.googleusercontent.com/aida-public/AB6AXuD7KAxixHOAAGQ2oojXCWe8sqm_tw-osg6IYbqI1-rd9cAaSG3QJ2gTXV8ZHMtV03bFuY9NxriPtPvKzjAu5VhfoHDDSnKOAe5mg7gdGsNlcM1w3kXTCU8II36ABYOfwO2glI8j3OQj9a-65GSyBMubfaVF7S2pw0_DZxJsHbtQtjtWjxnMPPbPT_yR2_H3J8ALEDnAUjmKhRSrf-nr7zLh40MO13TBP0jShrXo6lv2ADNeryYc1bj8VBzwdR2kdArewjynXXOPsrtC",
     userName = "User"
 }) => {
+    const navigate = useNavigate();
     return (
         <header className="header">
             <div className="logo-container">
@@ -29,9 +31,8 @@ const Header: React.FC<HeaderProps> = ({
             </div>
             <div className="header-right">
                 <nav className="nav">
-                    <a className="nav-link" href="#">Главная</a>
-                    <a className="nav-link" href="#">О нас</a>
-                    <a className="nav-link" href="#">Контакты</a>
+                    <a className="nav-link" style={{"cursor": "pointer"}} onClick={() => navigate('/')}>Главная</a>
+                    
                 </nav>
                 {isAuthenticated ? (
                     <div className="user-profile">
@@ -43,11 +44,8 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                 ) : (
                     <div className="header-buttons">
-                        <button className="btn btn-primary">
+                        <button className="btn btn-primary" onClick={() => navigate('/auth')}>
                             <span className="btn-text">Начать</span>
-                        </button>
-                        <button className="btn btn-secondary">
-                            <span className="btn-text">Войти</span>
                         </button>
                     </div>
                 )}
