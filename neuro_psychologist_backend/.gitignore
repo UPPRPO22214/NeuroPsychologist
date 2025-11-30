@@ -48,3 +48,10 @@ secrets/
 ### Logs ###
 logs/
 *.log
+
+
+### JaCoCo Code Coverage ###
+# JaCoCo coverage reports
+jacoco.exec
+**/jacoco.exec
+target/site/jacoco/
