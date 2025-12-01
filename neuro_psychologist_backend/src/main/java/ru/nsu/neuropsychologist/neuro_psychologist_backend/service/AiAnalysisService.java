@@ -1,5 +1,7 @@
 package ru.nsu.neuropsychologist.neuro_psychologist_backend.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -10,6 +12,8 @@ import ru.nsu.neuropsychologist.neuro_psychologist_backend.config.AiApiPropertie
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisRequest;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisResponse;
 
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -18,10 +22,12 @@ public class AiAnalysisService {
 
     private final WebClient webClient;
     private final AiApiProperties aiApiProperties;
+    private final ObjectMapper objectMapper;
 
     @Autowired
     public AiAnalysisService(AiApiProperties aiApiProperties) {
         this.aiApiProperties = aiApiProperties;
+        this.objectMapper = new ObjectMapper();
         this.webClient = WebClient.builder()
                 .baseUrl(aiApiProperties.getUrl())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -58,13 +64,45 @@ public class AiAnalysisService {
                     .bodyToMono(Map.class)
                     .block();
 
-            String analysis = extractAnalysisFromYandexResponse(response);
-            return new AnalysisResponse(analysis, true);
+            String analysisText = extractAnalysisFromYandexResponse(response);
+            return parseJsonResponse(analysisText);
 
         } catch (WebClientResponseException e) {
             return new AnalysisResponse("Ошибка при обращении к AI API: " + e.getStatusCode() + " " + e.getResponseBodyAsString());
         } catch (Exception e) {
             return new AnalysisResponse("Внутренняя ошибка сервера: " + e.getMessage());
+        }
+    }
+
+    private AnalysisResponse parseJsonResponse(String jsonText) {
+        try {
+            // Extract JSON from markdown code blocks if present
+            String cleanJson = jsonText.trim();
+            if (cleanJson.startsWith("```json")) {
+                cleanJson = cleanJson.substring(7);
+            } else if (cleanJson.startsWith("```")) {
+                cleanJson = cleanJson.substring(3);
+            }
+            if (cleanJson.endsWith("```")) {
+                cleanJson = cleanJson.substring(0, cleanJson.length() - 3);
+            }
+            cleanJson = cleanJson.trim();
+
+            JsonNode rootNode = objectMapper.readTree(cleanJson);
+            
+            Integer dayRating = rootNode.has("dayRating") ? rootNode.get("dayRating").asInt() : null;
+            
+            List<String> recommendations = new ArrayList<>();
+            if (rootNode.has("recommendations") && rootNode.get("recommendations").isArray()) {
+                for (JsonNode recNode : rootNode.get("recommendations")) {
+                    recommendations.add(recNode.asText());
+                }
+            }
+            
+            return new AnalysisResponse(dayRating, recommendations, ZonedDateTime.now());
+            
+        } catch (Exception e) {
+            return new AnalysisResponse("Ошибка при парсинге JSON ответа: " + e.getMessage());
         }
     }
 
@@ -95,10 +133,20 @@ public class AiAnalysisService {
 
     private String createPsychologicalAnalysisPrompt(String userText) {
         return String.format(
-            "Проанализируй следующий текст с точки зрения нейропсихологии. " +
+            "Проанализируй следующий текст пользователя о его дне с точки зрения нейропсихологии. " +
             "Обрати внимание на эмоциональное состояние, когнитивные паттерны, " +
-            "возможные психологические особенности и дай рекомендации:\n\n%s\n\n" +
-            "Предоставь структурированный анализ на русском языке.",
+            "возможные психологические особенности.\n\n" +
+            "Текст пользователя:\n%s\n\n" +
+            "Верни ответ СТРОГО в формате JSON (без дополнительного текста):\n" +
+            "{\n" +
+            "  \"dayRating\": <число от 1 до 10, где 1 - очень плохой день, 10 - отличный день>,\n" +
+            "  \"recommendations\": [\n" +
+            "    \"Рекомендация 1 по восстановлению и улучшению состояния\",\n" +
+            "    \"Рекомендация 2 по восстановлению и улучшению состояния\",\n" +
+            "    \"Рекомендация 3 по восстановлению и улучшению состояния\"\n" +
+            "  ]\n" +
+            "}\n\n" +
+            "Рекомендации должны быть конкретными, практичными и направленными на восстановление психологического состояния.",
             userText
         );
     }
