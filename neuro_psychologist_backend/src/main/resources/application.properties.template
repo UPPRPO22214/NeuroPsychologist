@@ -1,5 +1,9 @@
 spring.application.name=neuro_psychologist_backend
 
+# Frontend Configuration
+frontend.base-url=https://storage.yandexcloud.net/neuropsychologist-front/dist
+frontend.cache-dir=./frontend-cache
+
 # AI API Configuration (Yandex GPT)
 # ВАЖНО: Не коммитьте реальные значения в Git!
 # Используйте переменные окружения или application-local.properties
