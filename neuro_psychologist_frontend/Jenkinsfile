@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+    
+    environment {
+        NODE_VERSION = '20'
+        S3_BUCKET = credentials('S3_BUCKET_NAME')
+        AWS_REGION = credentials('AWS_REGION')
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                script {
+                    sh '''
+                        node --version
+                        npm --version
+                        npm ci
+                    '''
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    sh 'npm run build'
+                }
+            }
+        }
+        
+        stage('Deploy to S3') {
+            steps {
+                script {
+                    sh '''
+                        aws s3 sync dist/ s3://${S3_BUCKET} --delete --region ${AWS_REGION}
+                    '''
+                }
+            }
+        }
+        
+        stage('Invalidate CloudFront Cache (Optional)') {
+            when {
+                expression { 
+                    return env.CLOUDFRONT_DISTRIBUTION_ID != null && env.CLOUDFRONT_DISTRIBUTION_ID != ''
+                }
+            }
+            steps {
+                script {
+                    sh '''
+                        aws cloudfront create-invalidation \
+                            --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} \
+                            --paths "/*" \
+                            --region ${AWS_REGION}
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Deployment to S3 completed successfully!'
+        }
+        failure {
+            echo 'Deployment failed!'
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
