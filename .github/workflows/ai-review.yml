@@ -1,0 +1,83 @@
+name: 🤖 AI Review
+
+on:
+  # Trigger on pull requests to main branches
+  pull_request:
+    branches: [ main, master, develop ]
+    types: [ opened, synchronize, reopened ]
+  
+  # Manual trigger from Actions tab
+  workflow_dispatch:
+    inputs:
+      review-command:
+        type: choice
+        default: "run"
+        options: [ run, run-inline, run-context, run-summary, run-inline-reply, run-summary-reply ]
+        required: true
+        description: "AI Review command"
+      
+      pull-request-number:
+        type: string
+        required: true
+        description: "Pull request number"
+
+jobs:
+  ai-review:
+    name: Run AI Review
+    runs-on: ubuntu-latest
+    
+    # Only run if PR is not from a fork (to protect secrets)
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      # 1️⃣ Checkout repository and get diff changes
+      - name: 🧱 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper diff
+      
+      # 2️⃣ Run AI Review
+      - name: 🚀 Run AI Review
+        uses: Nikita-Filonov/ai-review@v0.36.0
+        env:
+          # 🔑 GitHub token for accessing PR and posting comments
+          VCS__HTTP_CLIENT__API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+          # 📦 PR context - owner, repository and PR number
+          VCS__PIPELINE__OWNER: ${{ github.repository_owner }}
+          VCS__PIPELINE__REPO: ${{ github.event.repository.name }}
+          VCS__PIPELINE__PULL_NUMBER: ${{ github.event.pull_request.number || inputs.pull-request-number }}
+          
+          # 🤖 OpenRouter token for LLM access
+          LLM__HTTP_CLIENT__API_TOKEN: ${{ secrets.OPENROUTER_API_TOKEN }}
+        
+        with:
+          # 🧠 Review command: full analysis, inline only, summary only, etc.
+          review-command: ${{ inputs.review-command || 'run' }}
+      
+      # 3️⃣ Comment on PR with review status
+      - name: 💬 Post review completion status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request?.number || '${{ inputs.pull-request-number }}';
+            const status = '${{ job.status }}';
+            const emoji = status === 'success' ? '✅' : '❌';
+            
+            const body = `## ${emoji} AI Review ${status === 'success' ? 'Completed' : 'Failed'}
+            
+            The AI code review has ${status === 'success' ? 'been completed' : 'encountered an error'}.
+            ${status === 'success' ? 'Check the comments above for detailed feedback.' : 'Please check the workflow logs for details.'}
+            
+            ---
+            *Powered by [AI Review](https://github.com/Nikita-Filonov/ai-review) via OpenRouter*`;
+            
+            if (prNumber) {
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body
+              });
+            }
