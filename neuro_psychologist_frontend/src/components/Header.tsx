@@ -1,20 +1,50 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/auth.store';
 
 interface HeaderProps {
-    isAuthenticated?: boolean;
     userAvatar?: string;
-    userName?: string;
 }
 
 const Header: React.FC<HeaderProps> = ({
-    isAuthenticated = false,
-    userAvatar = "https://lh3.googleusercontent.com/aida-public/AB6AXuD7KAxixHOAAGQ2oojXCWe8sqm_tw-osg6IYbqI1-rd9cAaSG3QJ2gTXV8ZHMtV03bFuY9NxriPtPvKzjAu5VhfoHDDSnKOAe5mg7gdGsNlcM1w3kXTCU8II36ABYOfwO2glI8j3OQj9a-65GSyBMubfaVF7S2pw0_DZxJsHbtQtjtWjxnMPPbPT_yR2_H3J8ALEDnAUjmKhRSrf-nr7zLh40MO13TBP0jShrXo6lv2ADNeryYc1bj8VBzwdR2kdArewjynXXOPsrtC",
-    userName = "User"
+    userAvatar = "https://lh3.googleusercontent.com/aida-public/AB6AXuD7KAxixHOAAGQ2oojXCWe8sqm_tw-osg6IYbqI1-rd9cAaSG3QJ2gTXV8ZHMtV03bFuY9NxriPtPvKzjAu5VhfoHDDSnKOAe5mg7gdGsNlcM1w3kXTCU8II36ABYOfwO2glI8j3OQj9a-65GSyBMubfaVF7S2pw0_DZxJsHbtQtjtWjxnMPPbPT_yR2_H3J8ALEDnAUjmKhRSrf-nr7zLh40MO13TBP0jShrXo6lv2ADNeryYc1bj8VBzwdR2kdArewjynXXOPsrtC"
 }) => {
     const navigate = useNavigate();
+    const { isAuthenticated, user, logout } = useAuthStore();
+    const [showDropdown, setShowDropdown] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    
+    const handleLogout = () => {
+        logout();
+        navigate('/');
+        setShowDropdown(false);
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+
+        if (showDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showDropdown]);
     return (
-        <header className="header">
+        <header className="header" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            backgroundColor: 'var(--background-secondary)',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+        }}>
             <div className="logo-container">
                 <svg className="logo-icon" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
                     <g clipPath="url(#clip0_6_543)">
@@ -35,12 +65,135 @@ const Header: React.FC<HeaderProps> = ({
                     
                 </nav>
                 {isAuthenticated ? (
-                    <div className="user-profile">
+                    <div
+                        ref={dropdownRef}
+                        className="user-profile"
+                        style={{ position: 'relative', display: 'flex', alignItems: 'center' }}
+                    >
                         <div
                             className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10"
-                            style={{ backgroundImage: `url("${userAvatar}")` }}
-                            title={userName}
+                            style={{
+                                backgroundImage: `url("${userAvatar}")`,
+                                cursor: 'pointer',
+                                border: `2px solid ${showDropdown ? 'var(--brand-primary)' : 'var(--surface-primary)'}`,
+                                transition: 'border-color 0.2s'
+                            }}
+                            title={user?.username || 'User'}
+                            onClick={() => setShowDropdown(!showDropdown)}
                         ></div>
+                        
+                        {showDropdown && (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    right: 0,
+                                    marginTop: '8px',
+                                    backgroundColor: 'var(--background-secondary)',
+                                    borderRadius: '12px',
+                                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                                    minWidth: '200px',
+                                    overflow: 'hidden',
+                                    zIndex: 1000,
+                                    border: '1px solid var(--surface-primary)'
+                                }}
+                            >
+                                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--surface-primary)' }}>
+                                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                        {user?.username || 'User'}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                        {user?.email}
+                                    </div>
+                                </div>
+                                
+                                <button
+                                    onClick={() => {
+                                        navigate('/analytics');
+                                        setShowDropdown(false);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 16px',
+                                        border: 'none',
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '14px',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        transition: 'background-color 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'var(--surface-secondary)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                    }}
+                                >
+                                    📊 Аналитика
+                                </button>
+                                
+                                <button
+                                    onClick={() => {
+                                        navigate('/settings');
+                                        setShowDropdown(false);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 16px',
+                                        border: 'none',
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '14px',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        transition: 'background-color 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'var(--surface-secondary)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                    }}
+                                >
+                                    ⚙️ Настройки
+                                </button>
+                                
+                                <div style={{ borderTop: '1px solid var(--surface-primary)' }}>
+                                    <button
+                                        onClick={handleLogout}
+                                        style={{
+                                            width: '100%',
+                                            padding: '12px 16px',
+                                            border: 'none',
+                                            backgroundColor: 'transparent',
+                                            color: '#ef4444',
+                                            fontSize: '14px',
+                                            textAlign: 'left',
+                                            cursor: 'pointer',
+                                            transition: 'background-color 0.2s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'var(--surface-secondary)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                        }}
+                                    >
+                                        🚪 Выйти
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="header-buttons">

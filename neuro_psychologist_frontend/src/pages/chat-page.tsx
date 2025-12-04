@@ -101,9 +101,9 @@ const ChatPage = () => {
   return (
     <div className="relative flex h-auto min-h-screen w-full flex-col bg-background-primary group/design-root overflow-x-hidden" style={{ fontFamily: 'Inter, "Noto Sans", sans-serif' }}>
       <div className="flex h-full grow flex-col">
-        <Header isAuthenticated={true} />
+        <Header />
         
-        <main className="flex-1 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8" style={{ paddingTop: 'calc(1rem + 60px)' }}>
           <div className="w-full max-w-6xl flex flex-col h-[95vh] bg-background-secondary rounded-2xl shadow-sm">
             <div className="p-6 border-b border-surface-primary">
               <h1 className="text-text-primary text-xl font-bold leading-tight">Dr. Anya Petrova</h1>

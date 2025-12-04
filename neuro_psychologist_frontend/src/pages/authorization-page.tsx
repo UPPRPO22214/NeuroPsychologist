@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthService } from '../services/auth.service';
+import { useAuthStore } from '../store/auth.store';
 import '../styles/Auth.css';
 import Header from '../components/Header';
 
 const AuthPage: React.FC = () => {
   const navigate = useNavigate();
+  const login = useAuthStore((state) => state.login);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,7 +20,13 @@ const AuthPage: React.FC = () => {
 
     try {
       const response = await AuthService.login({ email, password });
-      AuthService.saveToken(response.token);
+      
+      // Update auth store with token and user data
+      login(response.token, {
+        id: response.id,
+        username: response.username,
+        email: response.email
+      });
       
       // Redirect to chat page after successful login
       navigate('/chat');

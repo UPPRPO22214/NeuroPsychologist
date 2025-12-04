@@ -4,6 +4,7 @@ import WelcomePage from '../pages/welcome-page';
 import AuthPage from '../pages/authorization-page';
 import RegistrationPage from '../pages/registration-page';
 import ChatPage from '../pages/chat-page';
+import ProtectedRoute from './ProtectedRoute';
 
 const AppRouter: React.FC = () => {
   return (
@@ -12,7 +13,14 @@ const AppRouter: React.FC = () => {
         <Route path="/" element={<WelcomePage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/register" element={<RegistrationPage />} />
-        <Route path="/chat" element={<ChatPage />} />
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <ChatPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Router>
   );
