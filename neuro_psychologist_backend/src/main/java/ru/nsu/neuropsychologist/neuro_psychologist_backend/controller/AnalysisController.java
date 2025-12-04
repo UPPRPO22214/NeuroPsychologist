@@ -46,12 +46,24 @@ public class AnalysisController {
             @RequestBody AnalysisRequest request,
             Authentication authentication) {
 
-        if (request.getUserText() == null || request.getUserText().trim().isEmpty()) {
-            AnalysisResponse errorResponse = new AnalysisResponse("Текст для анализа не может быть пустым");
-            return ResponseEntity.badRequest().body(errorResponse);
+        logger.info("Received analysis request. Is check-in: {}", request.isCheckInRequest());
+
+        // Validate request based on type
+        if (request.isCheckInRequest()) {
+            // Validate check-in data
+            if (!isValidCheckInRequest(request)) {
+                AnalysisResponse errorResponse = new AnalysisResponse("Пожалуйста, заполните все поля чекапа");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+        } else {
+            // Validate regular text analysis
+            if (request.getUserText() == null || request.getUserText().trim().isEmpty()) {
+                AnalysisResponse errorResponse = new AnalysisResponse("Текст для анализа не может быть пустым");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
         }
 
-        // Get AI analysis
+        // Get AI analysis (service will automatically detect check-in vs regular analysis)
         AnalysisResponse response = aiAnalysisService.analyzeUserText(request);
 
 //        if (!response.isSuccess()) {
@@ -89,5 +101,46 @@ public class AnalysisController {
         return ResponseEntity.ok(response);
     }
 
+    private boolean isValidCheckInRequest(AnalysisRequest request) {
+        // Check that all ratings are present and valid (1-5)
+        if (request.getCalmnessRating() == null ||
+            request.getCalmnessRating() < 1 ||
+            request.getCalmnessRating() > 5) {
+            return false;
+        }
+        if (request.getEnergyRating() == null ||
+            request.getEnergyRating() < 1 ||
+            request.getEnergyRating() > 5) {
+            return false;
+        }
+        if (request.getSatisfactionRating() == null ||
+            request.getSatisfactionRating() < 1 ||
+            request.getSatisfactionRating() > 5) {
+            return false;
+        }
+        if (request.getConnectionRating() == null ||
+            request.getConnectionRating() < 1 ||
+            request.getConnectionRating() > 5) {
+            return false;
+        }
+        if (request.getEngagementRating() == null ||
+            request.getEngagementRating() < 1 ||
+            request.getEngagementRating() > 5) {
+            return false;
+        }
+
+        // Check that text answers are present
+        if (request.getCurrentStateText() == null || request.getCurrentStateText().trim().isEmpty()) {
+            return false;
+        }
+        if (request.getEnergyMomentsText() == null || request.getEnergyMomentsText().trim().isEmpty()) {
+            return false;
+        }
+        if (request.getMissingElementText() == null || request.getMissingElementText().trim().isEmpty()) {
+            return false;
+        }
+
+        return true;
+    }
 
 }

@@ -52,6 +52,12 @@ public class AiAnalysisService {
         try {
             logger.info("Starting analysis for user text");
 
+            // Check if this is a check-in request
+            if (request.isCheckInRequest()) {
+                logger.info("Processing as check-in request");
+                return analyzeCheckIn(request);
+            }
+
             // Проверка на минимальную осмысленность текста
             if (!isTextValidForAnalysis(request.getUserText())) {
                 return createInvalidTextResponse(request.getUserText());
@@ -317,6 +323,152 @@ public class AiAnalysisService {
         ));
         response.setAnalyzedAt(ZonedDateTime.now());
         return response;
+    }
+
+    public AnalysisResponse analyzeCheckIn(AnalysisRequest request) {
+        try {
+            logger.info("Starting check-in analysis");
+
+            // Combine all check-in data into structured text
+            String combinedText = buildCheckInText(request);
+            
+            String systemPrompt = getCheckInSystemPrompt();
+            String userPrompt = combinedText;
+
+            Map<String, Object> requestBody = Map.of(
+                    "modelUri", aiApiProperties.getModel(),
+                    "completionOptions", Map.of(
+                            "stream", false,
+                            "temperature", aiApiProperties.getTemperature(),
+                            "maxTokens", String.valueOf(aiApiProperties.getMaxTokens())
+                    ),
+                    "messages", List.of(
+                            Map.of("role", "system", "text", systemPrompt),
+                            Map.of("role", "user", "text", userPrompt)
+                    )
+            );
+
+            logger.info("Getting IAM token");
+            String iamToken = iamTokenService.getIamToken();
+            logger.info("IAM token obtained successfully");
+
+            WebClient webClient = webClientBuilder
+                    .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + iamToken)
+                    .build();
+
+            logger.info("Sending check-in request to Yandex GPT API");
+            String responseJson = webClient.post()
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            logger.info("Received response from Yandex GPT API");
+            logger.debug("Raw response: {}", responseJson);
+
+            // Extract text from JSON response
+            String extractedText = extractTextFromYandexResponse(responseJson);
+            logger.info("Extracted text from response");
+
+            // Parse recommendations from the response
+            List<String> recommendations = extractRecommendationsFromText(extractedText);
+
+            // Create response
+            AnalysisResponse response = new AnalysisResponse();
+            response.setAnalysisText(extractedText);
+            response.setRecommendations(recommendations);
+            response.setSuccess(true);
+            response.setAnalyzedAt(ZonedDateTime.now());
+            
+            return response;
+
+        } catch (WebClientResponseException e) {
+            logger.error("WebClient error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return new AnalysisResponse("Ошибка при обращении к AI API: " + e.getStatusCode() + " " + e.getResponseBodyAsString());
+        } catch (Exception e) {
+            logger.error("Unexpected error during check-in analysis", e);
+            return new AnalysisResponse("Внутренняя ошибка сервера: " + e.getMessage());
+        }
+    }
+
+    private String buildCheckInText(AnalysisRequest request) {
+        StringBuilder text = new StringBuilder();
+        
+        text.append("=== ЧЕКАП ДНЯ ===\n\n");
+        
+        text.append("ОЦЕНКИ ПО ШКАЛЕ ОТ 1 ДО 5:\n\n");
+        
+        text.append("1. Спокойствие и гармония с собой: ")
+            .append(request.getCalmnessRating()).append("/5\n");
+        
+        text.append("2. Энергия (наполненность vs истощение): ")
+            .append(request.getEnergyRating()).append("/5\n");
+        
+        text.append("3. Удовлетворённость днём: ")
+            .append(request.getSatisfactionRating()).append("/5\n");
+        
+        text.append("4. Близость и теплота контактов с людьми: ")
+            .append(request.getConnectionRating()).append("/5\n");
+        
+        text.append("5. Интерес, радость, вовлечённость: ")
+            .append(request.getEngagementRating()).append("/5\n\n");
+        
+        text.append("ОТКРЫТЫЕ ОТВЕТЫ:\n\n");
+        
+        text.append("Описание текущего состояния (слово/образ/метафора):\n")
+            .append(request.getCurrentStateText()).append("\n\n");
+        
+        text.append("Моменты, которые отняли/добавили энергии:\n")
+            .append(request.getEnergyMomentsText()).append("\n\n");
+        
+        text.append("Чего не хватает для полного покоя или удовлетворения:\n")
+            .append(request.getMissingElementText()).append("\n");
+        
+        return text.toString();
+    }
+
+    private String getCheckInSystemPrompt() {
+        return "Ты опытный нейропсихолог, специализирующийся на анализе эмоционального состояния и психологического благополучия. " +
+                "Пользователь прошёл чекап дня, где оценил различные аспекты своего состояния по шкале от 1 до 5 и ответил на открытые вопросы.\n\n" +
+                "Твоя задача:\n" +
+                "1. Проанализировать общую картину дня пользователя на основе его оценок и ответов\n" +
+                "2. Выявить ключевые паттерны и области, требующие внимания\n" +
+                "3. Дать 3-5 конкретных, практических рекомендаций для улучшения психологического состояния\n\n" +
+                "Формат ответа:\n" +
+                "- Начни с краткого обзора состояния пользователя (2-3 предложения)\n" +
+                "- Затем дай рекомендации в формате нумерованного списка\n" +
+                "- Рекомендации должны быть конкретными, выполнимыми и учитывать контекст ответов пользователя\n" +
+                "- Используй тёплый, поддерживающий тон";
+    }
+
+    private List<String> extractRecommendationsFromText(String text) {
+        List<String> recommendations = new ArrayList<>();
+        
+        // Try to find numbered recommendations
+        Pattern numberedPattern = Pattern.compile("(?:^|\\n)\\s*\\d+\\.\\s*(.+?)(?=\\n\\s*\\d+\\.|\\n\\n|$)", Pattern.DOTALL);
+        Matcher matcher = numberedPattern.matcher(text);
+        
+        while (matcher.find()) {
+            String recommendation = matcher.group(1).trim();
+            if (!recommendation.isEmpty() && recommendation.length() > 10) {
+                recommendations.add(recommendation);
+            }
+        }
+        
+        // If no numbered recommendations found, try bullet points
+        if (recommendations.isEmpty()) {
+            Pattern bulletPattern = Pattern.compile("(?:^|\\n)\\s*[•\\-\\*]\\s*(.+?)(?=\\n\\s*[•\\-\\*]|\\n\\n|$)", Pattern.DOTALL);
+            matcher = bulletPattern.matcher(text);
+            
+            while (matcher.find()) {
+                String recommendation = matcher.group(1).trim();
+                if (!recommendation.isEmpty() && recommendation.length() > 10) {
+                    recommendations.add(recommendation);
+                }
+            }
+        }
+        
+        return recommendations;
     }
 
     private String getSystemPrompt() {
