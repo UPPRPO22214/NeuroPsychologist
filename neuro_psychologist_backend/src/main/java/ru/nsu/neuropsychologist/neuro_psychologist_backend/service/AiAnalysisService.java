@@ -1,7 +1,7 @@
 package ru.nsu.neuropsychologist.neuro_psychologist_backend.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,24 +16,32 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class AiAnalysisService {
 
-    private final WebClient webClient;
+    private static final Logger logger = LoggerFactory.getLogger(AiAnalysisService.class);
+    private static final Pattern JSON_PATTERN = Pattern.compile("\\{.*?\\}", Pattern.DOTALL);
+    private static final Pattern RATING_PATTERN = Pattern.compile("(\\d+)/10|(\\d+)\\s*из\\s*10|рейтинг[\\s:]*([1-9]|10)");
+    private static final Pattern RECOMMENDATION_PATTERN = Pattern.compile(
+            "(?:рекомендация|совет)[\\s:\\d]*[\\-\\•\\*]?\\s*(.+?)(?=\\n|$|(?:рекомендация|совет))",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL
+    );
+
+    private final WebClient.Builder webClientBuilder;
     private final AiApiProperties aiApiProperties;
-    private final ObjectMapper objectMapper;
+    private final YandexIamTokenService iamTokenService;
 
     @Autowired
-    public AiAnalysisService(AiApiProperties aiApiProperties) {
+    public AiAnalysisService(AiApiProperties aiApiProperties, YandexIamTokenService iamTokenService) {
         this.aiApiProperties = aiApiProperties;
-        this.objectMapper = new ObjectMapper();
-        this.webClient = WebClient.builder()
+        this.iamTokenService = iamTokenService;
+        this.webClientBuilder = WebClient.builder()
                 .baseUrl(aiApiProperties.getUrl())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Api-Key " + aiApiProperties.getKey())
-                .defaultHeader("x-folder-id", aiApiProperties.getFolderId())
-                .build();
+                .defaultHeader("x-folder-id", aiApiProperties.getFolderId());
     }
 
     public AnalysisResponse analyzeUserText(String userText) {
@@ -42,68 +50,263 @@ public class AiAnalysisService {
 
     public AnalysisResponse analyzeUserText(AnalysisRequest request) {
         try {
+            logger.info("Starting analysis for user text");
+
+            // Проверка на минимальную осмысленность текста
+            if (!isTextValidForAnalysis(request.getUserText())) {
+                return createInvalidTextResponse(request.getUserText());
+            }
+
             String systemPrompt = getSystemPrompt();
             String userPrompt = createUserPrompt(request.getUserText(), request.getCustomPrompt());
-            
+
             Map<String, Object> requestBody = Map.of(
-                "modelUri", aiApiProperties.getModel(),
-                "completionOptions", Map.of(
-                    "stream", false,
-                    "temperature", aiApiProperties.getTemperature(),
-                    "maxTokens", String.valueOf(aiApiProperties.getMaxTokens())
-                ),
-                "messages", List.of(
-                    Map.of("role", "system", "text", systemPrompt),
-                    Map.of("role", "user", "text", userPrompt)
-                )
+                    "modelUri", aiApiProperties.getModel(),
+                    "completionOptions", Map.of(
+                            "stream", false,
+                            "temperature", aiApiProperties.getTemperature(),
+                            "maxTokens", String.valueOf(aiApiProperties.getMaxTokens())
+                    ),
+                    "messages", List.of(
+                            Map.of("role", "system", "text", systemPrompt),
+                            Map.of("role", "user", "text", userPrompt)
+                    )
             );
 
-            Map<String, Object> response = webClient.post()
+            logger.info("Getting IAM token");
+            String iamToken = iamTokenService.getIamToken();
+            logger.info("IAM token obtained successfully");
+
+            WebClient webClient = webClientBuilder
+                    .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + iamToken)
+                    .build();
+
+            logger.info("Sending request to Yandex GPT API");
+            String responseJson = webClient.post()
                     .bodyValue(requestBody)
                     .retrieve()
-                    .bodyToMono(Map.class)
+                    .bodyToMono(String.class)
                     .block();
 
-            String analysisText = extractAnalysisFromYandexResponse(response);
-            return parseJsonResponse(analysisText);
+            logger.info("Received response from Yandex GPT API");
+
+            // Парсим текстовый ответ
+            return new AnalysisResponse(responseJson.toString());
 
         } catch (WebClientResponseException e) {
+            logger.error("WebClient error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
             return new AnalysisResponse("Ошибка при обращении к AI API: " + e.getStatusCode() + " " + e.getResponseBodyAsString());
         } catch (Exception e) {
+            logger.error("Unexpected error during analysis", e);
             return new AnalysisResponse("Внутренняя ошибка сервера: " + e.getMessage());
         }
     }
 
-    private AnalysisResponse parseJsonResponse(String jsonText) {
+    private AnalysisResponse parseTextResponse(String responseJson) {
         try {
-            // Extract JSON from markdown code blocks if present
-            String cleanJson = jsonText.trim();
-            if (cleanJson.startsWith("```json")) {
-                cleanJson = cleanJson.substring(7);
-            } else if (cleanJson.startsWith("```")) {
-                cleanJson = cleanJson.substring(3);
-            }
-            if (cleanJson.endsWith("```")) {
-                cleanJson = cleanJson.substring(0, cleanJson.length() - 3);
-            }
-            cleanJson = cleanJson.trim();
+            // Извлекаем текстовый ответ из JSON структуры
+            String textResponse = extractTextFromYandexResponse(responseJson);
+            logger.info("Extracted text response: {}", textResponse);
 
-            JsonNode rootNode = objectMapper.readTree(cleanJson);
-            
-            Integer dayRating = rootNode.has("dayRating") ? rootNode.get("dayRating").asInt() : null;
-            
-            List<String> recommendations = new ArrayList<>();
-            if (rootNode.has("recommendations") && rootNode.get("recommendations").isArray()) {
-                for (JsonNode recNode : rootNode.get("recommendations")) {
-                    recommendations.add(recNode.asText());
+            // Пытаемся найти JSON в тексте
+            Integer dayRating = extractDayRating(textResponse);
+            List<String> recommendations = extractRecommendations(textResponse);
+
+            // Если не удалось извлечь структурированные данные, используем текст как рекомендацию
+            if (dayRating == null && recommendations.isEmpty()) {
+                logger.info("No structured data found, using text as recommendation");
+                recommendations = List.of(textResponse);
+                dayRating = estimateRatingFromText(textResponse);
+            }
+
+            // Если всё равно нет рейтинга, ставим по умолчанию
+            if (dayRating == null) {
+                dayRating = 5; // средний рейтинг по умолчанию
+            }
+
+            // Создаем успешный ответ
+            AnalysisResponse response = new AnalysisResponse();
+            response.setDayRating(dayRating);
+            response.setRecommendations(recommendations);
+            response.setAnalyzedAt(ZonedDateTime.now());
+            response.setSuccess(true);
+
+            return response;
+
+        } catch (Exception e) {
+            logger.error("Error parsing AI response: {}", e.getMessage(), e);
+            return new AnalysisResponse("Ошибка при обработке ответа AI: " + e.getMessage());
+        }
+    }
+
+    private String extractTextFromYandexResponse(String responseJson) {
+        try {
+            // Пытаемся парсить как JSON
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var root = mapper.readTree(responseJson);
+            var result = root.path("result");
+            var alternatives = result.path("alternatives");
+
+            if (alternatives.isArray() && !alternatives.isEmpty()) {
+                var firstAlternative = alternatives.get(0);
+                var message = firstAlternative.path("message");
+                return message.path("text").asText();
+            }
+        } catch (Exception e) {
+            logger.warn("Could not parse as JSON, using raw response");
+        }
+
+        // Если не удалось парсить JSON, ищем текст вручную
+        return findTextInResponse(responseJson);
+    }
+
+    private String findTextInResponse(String response) {
+        // Ищем текстовый контент в ответе
+        if (response.contains("\"text\"")) {
+            int textStart = response.indexOf("\"text\":\"") + 8;
+            if (textStart > 8) {
+                int textEnd = response.indexOf("\"", textStart);
+                if (textEnd > textStart) {
+                    return response.substring(textStart, textEnd).replace("\\n", "\n");
                 }
             }
-            
-            return new AnalysisResponse(dayRating, recommendations, ZonedDateTime.now());
-            
-        } catch (Exception e) {
-            return new AnalysisResponse("Ошибка при парсинге JSON ответа: " + e.getMessage());
         }
+
+        // Если не нашли структурированный текст, возвращаем как есть
+        return response;
+    }
+
+    private Integer extractDayRating(String text) {
+        // Ищем рейтинг 1-10 в тексте
+        Matcher matcher = RATING_PATTERN.matcher(text.toLowerCase());
+        if (matcher.find()) {
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                if (matcher.group(i) != null) {
+                    try {
+                        int rating = Integer.parseInt(matcher.group(i));
+                        if (rating >= 1 && rating <= 10) {
+                            return rating;
+                        }
+                    } catch (NumberFormatException e) {
+                        // Продолжаем поиск
+                    }
+                }
+            }
+        }
+
+        // Ищем просто числа 1-10
+        Pattern simpleNumber = Pattern.compile("\\b([1-9]|10)\\b");
+        matcher = simpleNumber.matcher(text);
+        if (matcher.find()) {
+            try {
+                int rating = Integer.parseInt(matcher.group(1));
+                if (rating >= 1 && rating <= 10) {
+                    return rating;
+                }
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+
+        return null;
+    }
+
+    private List<String> extractRecommendations(String text) {
+        List<String> recommendations = new ArrayList<>();
+
+        // Ищем рекомендации в тексте
+        Matcher matcher = RECOMMENDATION_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String recommendation = matcher.group(1).trim();
+            if (!recommendation.isEmpty() && recommendation.length() > 10) {
+                recommendations.add(recommendation);
+            }
+        }
+
+        // Если не нашли по паттерну, разбиваем текст на абзацы
+        if (recommendations.isEmpty()) {
+            String[] paragraphs = text.split("\\n\\n|\\.\\s+");
+            for (String paragraph : paragraphs) {
+                String trimmed = paragraph.trim();
+                if (trimmed.length() > 20 && !trimmed.toLowerCase().contains("рейтинг")) {
+                    recommendations.add(trimmed);
+                }
+            }
+        }
+
+        // Ограничиваем количество рекомендаций
+        if (recommendations.size() > 3) {
+            recommendations = recommendations.subList(0, 3);
+        }
+
+        return recommendations;
+    }
+
+    private Integer estimateRatingFromText(String text) {
+        // Простая эвристика для оценки настроения по тексту
+        String lowerText = text.toLowerCase();
+
+        int positiveWords = countOccurrences(lowerText,
+                "хорош", "положительн", "отличн", "замечательн", "прекрасн", "радост", "счастлив");
+        int negativeWords = countOccurrences(lowerText,
+                "плох", "отрицательн", "ужасн", "грустн", "печальн", "депресси", "тревожн");
+
+        if (positiveWords > negativeWords * 2) return 8;
+        if (positiveWords > negativeWords) return 6;
+        if (negativeWords > positiveWords * 2) return 3;
+        if (negativeWords > positiveWords) return 4;
+
+        return 5; // нейтральный
+    }
+
+    private int countOccurrences(String text, String... words) {
+        int count = 0;
+        for (String word : words) {
+            Pattern pattern = Pattern.compile("\\b" + word + "\\w*\\b");
+            Matcher matcher = pattern.matcher(text);
+            while (matcher.find()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean isTextValidForAnalysis(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return false;
+        }
+
+        // Проверяем на бессмысленный текст (одни буквы без пробелов)
+        String trimmed = text.trim();
+        if (trimmed.length() < 10) {
+            return false;
+        }
+
+        // Проверяем наличие пробелов и знаков препинания
+        boolean hasSpaces = trimmed.contains(" ");
+        boolean hasPunctuation = trimmed.matches(".*[.,!?;:].*");
+
+        // Проверяем на повторяющиеся символы или бессмысленный набор
+        if (!hasSpaces && trimmed.length() < 20) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private AnalysisResponse createInvalidTextResponse(String text) {
+        AnalysisResponse response = new AnalysisResponse();
+        response.setSuccess(false);
+        response.setError("Текст слишком короткий или не содержит достаточно информации для анализа. " +
+                "Пожалуйста, опишите ваш день более подробно.");
+        response.setDayRating(5); // Средний рейтинг по умолчанию
+        response.setRecommendations(List.of(
+                "Попробуйте описать ваш день более подробно: что произошло, какие эмоции вы испытывали",
+                "Опишите ваши мысли и чувства в течение дня",
+                "Расскажите о взаимодействиях с другими людьми"
+        ));
+        response.setAnalyzedAt(ZonedDateTime.now());
+        return response;
     }
 
     private String getSystemPrompt() {
@@ -111,63 +314,32 @@ public class AiAnalysisService {
         if (configuredPrompt != null && !configuredPrompt.trim().isEmpty()) {
             return configuredPrompt;
         }
-        // Default system prompt if not configured
-        return "Ты опытный нейропсихолог. Анализируй текст пользователя и предоставь профессиональную психологическую оценку.";
+        return "Ты опытный нейропсихолог. Анализируй текст пользователя о его дне и предоставь профессиональную психологическую оценку. " +
+                "Дай оценку дня от 1 до 10 (где 1 - очень плохой день, 10 - отличный день) и 3 конкретные рекомендации по улучшению состояния.";
     }
 
     private String createUserPrompt(String userText, String customPrompt) {
         if (customPrompt != null && !customPrompt.trim().isEmpty()) {
-            // Use custom prompt with user text
             return String.format("%s\n\nТекст для анализа:\n%s", customPrompt, userText);
         }
-        
+
         String promptTemplate = aiApiProperties.getUserPromptTemplate();
         if (promptTemplate != null && !promptTemplate.trim().isEmpty()) {
-            // Use configured template
             return String.format(promptTemplate, userText);
         }
-        
-        // Default prompt template if not configured
+
         return createPsychologicalAnalysisPrompt(userText);
     }
 
     private String createPsychologicalAnalysisPrompt(String userText) {
         return String.format(
-            "Проанализируй следующий текст пользователя о его дне с точки зрения нейропсихологии. " +
-            "Обрати внимание на эмоциональное состояние, когнитивные паттерны, " +
-            "возможные психологические особенности.\n\n" +
-            "Текст пользователя:\n%s\n\n" +
-            "Верни ответ СТРОГО в формате JSON (без дополнительного текста):\n" +
-            "{\n" +
-            "  \"dayRating\": <число от 1 до 10, где 1 - очень плохой день, 10 - отличный день>,\n" +
-            "  \"recommendations\": [\n" +
-            "    \"Рекомендация 1 по восстановлению и улучшению состояния\",\n" +
-            "    \"Рекомендация 2 по восстановлению и улучшению состояния\",\n" +
-            "    \"Рекомендация 3 по восстановлению и улучшению состояния\"\n" +
-            "  ]\n" +
-            "}\n\n" +
-            "Рекомендации должны быть конкретными, практичными и направленными на восстановление психологического состояния.",
-            userText
+                "Проанализируй следующий текст пользователя о его дне с точки зрения нейропсихологии:\n\n" +
+                        "Текст пользователя:\n%s\n\n" +
+                        "Сделай следующее:\n" +
+                        "1. Оцени день пользователя по шкале от 1 до 10 (где 1 - очень плохой день, 10 - отличный день)\n" +
+                        "2. Дай 3 конкретные практические рекомендации по восстановлению и улучшению психологического состояния\n\n" +
+                        "Ответ дай в свободной текстовой форме.",
+                userText
         );
-    }
-
-    @SuppressWarnings("unchecked")
-    private String extractAnalysisFromYandexResponse(Map<String, Object> response) {
-        try {
-            Map<String, Object> result = (Map<String, Object>) response.get("result");
-            if (result != null) {
-                List<Map<String, Object>> alternatives = (List<Map<String, Object>>) result.get("alternatives");
-                if (alternatives != null && !alternatives.isEmpty()) {
-                    Map<String, Object> firstAlternative = alternatives.get(0);
-                    Map<String, Object> message = (Map<String, Object>) firstAlternative.get("message");
-                    if (message != null) {
-                        return (String) message.get("text");
-                    }
-                }
-            }
-            return "Не удалось получить анализ от Yandex GPT API";
-        } catch (Exception e) {
-            return "Ошибка при обработке ответа от Yandex GPT API: " + e.getMessage();
-        }
     }
 }

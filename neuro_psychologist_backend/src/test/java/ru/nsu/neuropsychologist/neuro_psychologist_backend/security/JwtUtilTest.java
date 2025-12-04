@@ -19,7 +19,7 @@ class JwtUtilTest {
         jwtUtil = new JwtUtil();
         ReflectionTestUtils.setField(jwtUtil, "secret",
             "testSecretKeyForJWTTokenGenerationThatShouldBeAtLeast256BitsLongForHS256Algorithm");
-        ReflectionTestUtils.setField(jwtUtil, "expiration", 3600000L); // 1 час
+        ReflectionTestUtils.setField(jwtUtil, "expiration", 3600000L); 
         
         testUser = new User();
         testUser.setId(1);

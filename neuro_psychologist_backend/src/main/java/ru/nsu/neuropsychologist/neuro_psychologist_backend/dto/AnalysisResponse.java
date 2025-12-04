@@ -13,6 +13,10 @@ public class AnalysisResponse {
 
     public AnalysisResponse() {}
 
+    public AnalysisResponse(List<String> recommendations) {
+        this.recommendations = recommendations;
+    }
+
     public AnalysisResponse(Integer dayRating, List<String> recommendations, ZonedDateTime analyzedAt) {
         this.dayRating = dayRating;
         this.recommendations = recommendations;

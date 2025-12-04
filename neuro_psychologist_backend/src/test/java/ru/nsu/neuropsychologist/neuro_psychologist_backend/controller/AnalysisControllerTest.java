@@ -7,9 +7,17 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisRequest;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisResponse;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.entity.User;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.repository.DayAnalysisRepository;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.repository.UserRepository;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.service.AiAnalysisService;
+
+import java.time.ZonedDateTime;
+import java.util.Arrays;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -20,6 +28,15 @@ class AnalysisControllerTest {
     @Mock
     private AiAnalysisService aiAnalysisService;
 
+    @Mock
+    private DayAnalysisRepository dayAnalysisRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private Authentication authentication;
+
     @InjectMocks
     private AnalysisController analysisController;
 
@@ -27,19 +44,29 @@ class AnalysisControllerTest {
     void testAnalyzeText_Success() {
         // Arrange
         AnalysisRequest request = new AnalysisRequest("Тестовый текст для анализа");
-        AnalysisResponse mockResponse = new AnalysisResponse("Анализ текста", true);
+        AnalysisResponse mockResponse = new AnalysisResponse(
+                8,
+                Arrays.asList("Рекомендация 1", "Рекомендация 2"),
+                ZonedDateTime.now()
+        );
         
         when(aiAnalysisService.analyzeUserText("Тестовый текст для анализа"))
                 .thenReturn(mockResponse);
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getName()).thenReturn("test@example.com");
+        
+        User mockUser = new User();
+        mockUser.setEmail("test@example.com");
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(mockUser));
 
         // Act
-        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request);
+        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request, authentication);
 
         // Assert
         assertEquals(HttpStatus.OK, result.getStatusCode());
         assertNotNull(result.getBody());
         assertTrue(result.getBody().isSuccess());
-        assertEquals("Анализ текста", result.getBody().getAnalysis());
+        assertEquals(8, result.getBody().getDayRating());
         
         verify(aiAnalysisService, times(1)).analyzeUserText("Тестовый текст для анализа");
     }
@@ -50,7 +77,7 @@ class AnalysisControllerTest {
         AnalysisRequest request = new AnalysisRequest("");
 
         // Act
-        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request);
+        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request, null);
 
         // Assert
         assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
@@ -67,7 +94,7 @@ class AnalysisControllerTest {
         AnalysisRequest request = new AnalysisRequest(null);
 
         // Act
-        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request);
+        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request, null);
 
         // Assert
         assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
@@ -88,7 +115,7 @@ class AnalysisControllerTest {
                 .thenReturn(mockResponse);
 
         // Act
-        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request);
+        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request, null);
 
         // Assert
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, result.getStatusCode());
