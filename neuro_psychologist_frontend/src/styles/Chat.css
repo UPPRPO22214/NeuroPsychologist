@@ -155,3 +155,38 @@
   'GRAD' 0,
   'opsz' 24
 }
+
+/* Markdown content styles */
+.markdown-content p {
+  margin-bottom: 0.75rem;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.markdown-content .markdown-list {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+  list-style-type: disc;
+}
+
+.markdown-content .markdown-list li {
+  margin-bottom: 0.5rem;
+  line-height: 1.625;
+}
+
+.markdown-content .markdown-list li:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content br {
+  display: block;
+  content: "";
+  margin-top: 0.5rem;
+}

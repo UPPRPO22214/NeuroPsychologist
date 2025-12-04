@@ -7,6 +7,7 @@ public class AnalysisResponse {
     private Long id;
     private Integer dayRating;
     private List<String> recommendations;
+    private String analysisText;  // Текст анализа от AI
     private ZonedDateTime analyzedAt;
     private boolean success;
     private String error;
@@ -83,5 +84,13 @@ public class AnalysisResponse {
 
     public void setError(String error) {
         this.error = error;
+    }
+
+    public String getAnalysisText() {
+        return analysisText;
+    }
+
+    public void setAnalysisText(String analysisText) {
+        this.analysisText = analysisText;
     }
 }

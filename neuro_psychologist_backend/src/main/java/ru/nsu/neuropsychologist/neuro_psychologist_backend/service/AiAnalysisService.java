@@ -89,9 +89,19 @@ public class AiAnalysisService {
                     .block();
 
             logger.info("Received response from Yandex GPT API");
+            logger.debug("Raw response: {}", responseJson);
 
-            // Парсим текстовый ответ
-            return new AnalysisResponse(responseJson.toString());
+            // Извлекаем текст из JSON ответа
+            String extractedText = extractTextFromYandexResponse(responseJson);
+            logger.info("Extracted text from response");
+
+            // Создаем ответ с извлеченным текстом
+            AnalysisResponse response = new AnalysisResponse();
+            response.setAnalysisText(extractedText);
+            response.setSuccess(true);
+            response.setAnalyzedAt(ZonedDateTime.now());
+            
+            return response;
 
         } catch (WebClientResponseException e) {
             logger.error("WebClient error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());

@@ -8,12 +8,13 @@ export interface Message {
 }
 
 export interface AnalysisResponse {
-  id?: number;
-  dayRating?: number;
-  recommendations?: string[];
-  analyzedAt?: string;
+  id: number | null;
+  dayRating: number | null;
+  recommendations: string[] | null;
+  analysisText: string | null;
+  analyzedAt: string | null;
   success: boolean;
-  error?: string;
+  error: string | null;
 }
 
 export const chatService = {

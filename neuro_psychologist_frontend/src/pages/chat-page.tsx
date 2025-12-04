@@ -47,7 +47,7 @@ const ChatPage = () => {
       
       const response = await chatService.sendMessage(userMessage.text);
 
-      if (response.success && response.recommendations && response.recommendations.length > 0) {
+      if (response.success && response.analysisText) {
         const systemMessage: Message = {
           id: (Date.now() + 1).toString(),
           text: formatResponse(response),
@@ -80,15 +80,12 @@ const ChatPage = () => {
   const formatResponse = (response: any): string => {
     let formattedText = '';
     
-    if (response.dayRating !== undefined) {
+    if (response.dayRating !== null && response.dayRating !== undefined) {
       formattedText += `Оценка вашего дня: ${response.dayRating}/10\n\n`;
     }
     
-    if (response.recommendations && response.recommendations.length > 0) {
-      formattedText += 'Рекомендации:\n';
-      response.recommendations.forEach((rec: string, index: number) => {
-        formattedText += `${index + 1}. ${rec}\n`;
-      });
+    if (response.analysisText) {
+      formattedText += response.analysisText;
     }
     
     return formattedText.trim();
