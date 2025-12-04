@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthService } from '../services/auth.service';
+import { useAuthStore } from '../store/auth.store';
 import '../styles/Auth.css';
 
 const RegistrationPage: React.FC = () => {
   const navigate = useNavigate();
+  const login = useAuthStore((state) => state.login);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -24,7 +26,13 @@ const RegistrationPage: React.FC = () => {
         firstName,
         lastName
       });
-      AuthService.saveToken(response.token);
+      
+      // Update auth store with token and user data
+      login(response.token, {
+        id: response.id,
+        username: response.username,
+        email: response.email
+      });
       
       // Redirect to chat page after successful registration
       navigate('/chat');
