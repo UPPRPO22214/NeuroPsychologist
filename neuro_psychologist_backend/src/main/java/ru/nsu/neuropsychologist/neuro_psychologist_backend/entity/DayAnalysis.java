@@ -19,14 +19,45 @@ public class DayAnalysis {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
     
-    @Column(name = "user_text", columnDefinition = "TEXT", nullable = false)
+    @Column(name = "user_text", columnDefinition = "TEXT")
     private String userText;
     
-    @Column(name = "day_rating", nullable = false)
+    @Column(name = "day_rating")
     private Integer dayRating;
     
     @Column(name = "recommendations", columnDefinition = "TEXT")
     private String recommendations;
+    
+    // Check-in fields
+    @Column(name = "calmness_rating")
+    private Integer calmnessRating;
+    
+    @Column(name = "energy_rating")
+    private Integer energyRating;
+    
+    @Column(name = "satisfaction_rating")
+    private Integer satisfactionRating;
+    
+    @Column(name = "connection_rating")
+    private Integer connectionRating;
+    
+    @Column(name = "engagement_rating")
+    private Integer engagementRating;
+    
+    @Column(name = "current_state_text", columnDefinition = "TEXT")
+    private String currentStateText;
+    
+    @Column(name = "energy_moments_text", columnDefinition = "TEXT")
+    private String energyMomentsText;
+    
+    @Column(name = "missing_element_text", columnDefinition = "TEXT")
+    private String missingElementText;
+    
+    @Column(name = "llm_response", columnDefinition = "TEXT")
+    private String llmResponse;
+    
+    @Column(name = "is_checkin")
+    private Boolean isCheckin = false;
     
     @Column(name = "analyzed_at", nullable = false)
     private ZonedDateTime analyzedAt;
@@ -97,5 +128,86 @@ public class DayAnalysis {
     
     public void setCreatedAt(ZonedDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+    
+    // Check-in getters and setters
+    public Integer getCalmnessRating() {
+        return calmnessRating;
+    }
+    
+    public void setCalmnessRating(Integer calmnessRating) {
+        this.calmnessRating = calmnessRating;
+    }
+    
+    public Integer getEnergyRating() {
+        return energyRating;
+    }
+    
+    public void setEnergyRating(Integer energyRating) {
+        this.energyRating = energyRating;
+    }
+    
+    public Integer getSatisfactionRating() {
+        return satisfactionRating;
+    }
+    
+    public void setSatisfactionRating(Integer satisfactionRating) {
+        this.satisfactionRating = satisfactionRating;
+    }
+    
+    public Integer getConnectionRating() {
+        return connectionRating;
+    }
+    
+    public void setConnectionRating(Integer connectionRating) {
+        this.connectionRating = connectionRating;
+    }
+    
+    public Integer getEngagementRating() {
+        return engagementRating;
+    }
+    
+    public void setEngagementRating(Integer engagementRating) {
+        this.engagementRating = engagementRating;
+    }
+    
+    public String getCurrentStateText() {
+        return currentStateText;
+    }
+    
+    public void setCurrentStateText(String currentStateText) {
+        this.currentStateText = currentStateText;
+    }
+    
+    public String getEnergyMomentsText() {
+        return energyMomentsText;
+    }
+    
+    public void setEnergyMomentsText(String energyMomentsText) {
+        this.energyMomentsText = energyMomentsText;
+    }
+    
+    public String getMissingElementText() {
+        return missingElementText;
+    }
+    
+    public void setMissingElementText(String missingElementText) {
+        this.missingElementText = missingElementText;
+    }
+    
+    public String getLlmResponse() {
+        return llmResponse;
+    }
+    
+    public void setLlmResponse(String llmResponse) {
+        this.llmResponse = llmResponse;
+    }
+    
+    public Boolean getIsCheckin() {
+        return isCheckin;
+    }
+    
+    public void setIsCheckin(Boolean isCheckin) {
+        this.isCheckin = isCheckin;
     }
 }
