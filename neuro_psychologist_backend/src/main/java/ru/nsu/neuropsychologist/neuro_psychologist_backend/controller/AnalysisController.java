@@ -66,37 +66,67 @@ public class AnalysisController {
         // Get AI analysis (service will automatically detect check-in vs regular analysis)
         AnalysisResponse response = aiAnalysisService.analyzeUserText(request);
 
-//        if (!response.isSuccess()) {
-//            return ResponseEntity.internalServerError().body(response);
-//        }
-//
-//        // Save to database if user is authenticated
-//        if (authentication != null && authentication.isAuthenticated()) {
-//            try {
-//                String userEmail = authentication.getName();
-//                User user = userRepository.findByEmail(userEmail)
-//                        .orElseThrow(() -> new RuntimeException("User not found"));
-//
-//                DayAnalysis dayAnalysis = new DayAnalysis();
-//                dayAnalysis.setUser(user);
-//                dayAnalysis.setUserText(request.getUserText());
-//                dayAnalysis.setDayRating(response.getDayRating());
-//                dayAnalysis.setRecommendations(objectMapper.writeValueAsString(response.getRecommendations()));
-//                dayAnalysis.setAnalyzedAt(response.getAnalyzedAt());
-//
-//                DayAnalysis savedAnalysis = dayAnalysisRepository.save(dayAnalysis);
-//                response.setId(savedAnalysis.getId());
-//
-//            } catch (JsonProcessingException e) {
-//                logger.error("Error saving analysis: {}", e.getMessage(), e);
-//                return ResponseEntity.internalServerError()
-//                        .body(new AnalysisResponse("Ошибка при сохранении анализа: " + e.getMessage()));
-//            } catch (Exception e) {
-//                logger.error("Unexpected error saving analysis: {}", e.getMessage(), e);
-//                return ResponseEntity.internalServerError()
-//                        .body(new AnalysisResponse("Ошибка при сохранении анализа: " + e.getMessage()));
-//            }
-//        }
+        if (!response.isSuccess()) {
+            return ResponseEntity.internalServerError().body(response);
+        }
+
+        // Save to database if user is authenticated
+        if (authentication != null && authentication.isAuthenticated()) {
+            try {
+                String userEmail = authentication.getName();
+                User user = userRepository.findByEmail(userEmail)
+                        .orElseThrow(() -> new RuntimeException("User not found"));
+
+                DayAnalysis dayAnalysis = new DayAnalysis();
+                dayAnalysis.setUser(user);
+                dayAnalysis.setAnalyzedAt(response.getAnalyzedAt());
+                
+                // Set LLM response
+                dayAnalysis.setLlmResponse(response.getAnalysisText());
+                
+                // Check if this is a check-in request
+                if (request.isCheckInRequest()) {
+                    dayAnalysis.setIsCheckin(true);
+                    
+                    // Save check-in ratings
+                    dayAnalysis.setCalmnessRating(request.getCalmnessRating());
+                    dayAnalysis.setEnergyRating(request.getEnergyRating());
+                    dayAnalysis.setSatisfactionRating(request.getSatisfactionRating());
+                    dayAnalysis.setConnectionRating(request.getConnectionRating());
+                    dayAnalysis.setEngagementRating(request.getEngagementRating());
+                    
+                    // Save check-in text responses
+                    dayAnalysis.setCurrentStateText(request.getCurrentStateText());
+                    dayAnalysis.setEnergyMomentsText(request.getEnergyMomentsText());
+                    dayAnalysis.setMissingElementText(request.getMissingElementText());
+                } else {
+                    dayAnalysis.setIsCheckin(false);
+                    
+                    // Save regular analysis data
+                    dayAnalysis.setUserText(request.getUserText());
+                    dayAnalysis.setDayRating(response.getDayRating());
+                }
+                
+                // Save recommendations as JSON if present
+                if (response.getRecommendations() != null && !response.getRecommendations().isEmpty()) {
+                    dayAnalysis.setRecommendations(objectMapper.writeValueAsString(response.getRecommendations()));
+                }
+
+                DayAnalysis savedAnalysis = dayAnalysisRepository.save(dayAnalysis);
+                response.setId(savedAnalysis.getId());
+                
+                logger.info("Successfully saved analysis with ID: {}", savedAnalysis.getId());
+
+            } catch (JsonProcessingException e) {
+                logger.error("Error saving analysis: {}", e.getMessage(), e);
+                return ResponseEntity.internalServerError()
+                        .body(new AnalysisResponse("Ошибка при сохранении анализа: " + e.getMessage()));
+            } catch (Exception e) {
+                logger.error("Unexpected error saving analysis: {}", e.getMessage(), e);
+                return ResponseEntity.internalServerError()
+                        .body(new AnalysisResponse("Ошибка при сохранении анализа: " + e.getMessage()));
+            }
+        }
 
         return ResponseEntity.ok(response);
     }
