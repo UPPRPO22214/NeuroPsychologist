@@ -138,6 +138,35 @@ const Header: React.FC<HeaderProps> = ({
                                 
                                 <button
                                     onClick={() => {
+                                        navigate('/history');
+                                        setShowDropdown(false);
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 16px',
+                                        border: 'none',
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '14px',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        transition: 'background-color 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'var(--surface-secondary)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                    }}
+                                >
+                                    📜 История
+                                </button>
+                                
+                                <button
+                                    onClick={() => {
                                         navigate('/analytics');
                                         setShowDropdown(false);
                                     }}

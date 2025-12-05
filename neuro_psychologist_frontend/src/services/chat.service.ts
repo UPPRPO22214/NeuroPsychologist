@@ -1,3 +1,5 @@
+import type { ChatHistoryResponse, ChatHistoryParams } from '../types/chat-history.types';
+
 const API_URL = 'http://localhost:8080/api';
 
 export interface Message {
@@ -70,6 +72,37 @@ export const chatService = {
 
     if (!response.ok) {
       throw new Error('Failed to submit check-in');
+    }
+
+    return response.json();
+  },
+
+  async getChatHistory(params?: ChatHistoryParams): Promise<ChatHistoryResponse> {
+    const token = localStorage.getItem('authToken');
+    
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const queryParams = new URLSearchParams();
+    if (params?.page !== undefined) {
+      queryParams.append('page', params.page.toString());
+    }
+    if (params?.size !== undefined) {
+      queryParams.append('size', params.size.toString());
+    }
+
+    const url = `${API_URL}/analysis/history${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch chat history');
     }
 
     return response.json();
