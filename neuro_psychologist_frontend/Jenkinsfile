@@ -10,6 +10,7 @@ pipeline {
         AWS_REGION = credentials('AWS_REGION')
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        PATH = "${env.HOME}/.local/bin:${env.PATH}"
     }
     
     stages {
@@ -60,9 +61,15 @@ pipeline {
                         echo "Installing AWS CLI..."
                         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
                         unzip -q awscliv2.zip
-                        sudo ./aws/install || ./aws/install --install-dir ~/.local/aws-cli --bin-dir ~/.local/bin
+                        sudo ./aws/install 2>/dev/null || ./aws/install --install-dir $HOME/.local/aws-cli --bin-dir $HOME/.local/bin
                         rm -rf awscliv2.zip aws
+                        echo "AWS CLI installed to $HOME/.local/bin"
+                    else
+                        echo "AWS CLI already installed"
                     fi
+                    
+                    # Verify installation
+                    export PATH="$HOME/.local/bin:$PATH"
                     aws --version
                 '''
             }
