@@ -1,8 +1,11 @@
 pipeline {
     agent any
     
+    tools {
+        nodejs 'NodeJS 20'
+    }
+    
     environment {
-        NODE_VERSION = '20'
         S3_BUCKET = credentials('S3_BUCKET_NAME')
         AWS_REGION = credentials('AWS_REGION')
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
@@ -18,7 +21,7 @@ pipeline {
         
         stage('Install Dependencies') {
             steps {
-                script {
+                dir('neuro_psychologist_frontend') {
                     sh '''
                         node --version
                         npm --version
@@ -30,7 +33,7 @@ pipeline {
         
         stage('Build') {
             steps {
-                script {
+                dir('neuro_psychologist_frontend') {
                     sh 'npm run build'
                 }
             }
@@ -38,7 +41,7 @@ pipeline {
         
         stage('Deploy to S3') {
             steps {
-                script {
+                dir('neuro_psychologist_frontend') {
                     sh '''
                         aws s3 sync dist/ s3://${S3_BUCKET} --delete --region ${AWS_REGION}
                     '''
