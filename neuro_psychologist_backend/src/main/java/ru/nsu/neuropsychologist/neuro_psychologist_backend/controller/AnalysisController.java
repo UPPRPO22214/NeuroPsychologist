@@ -15,12 +15,16 @@ import org.springframework.web.bind.annotation.*;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisRequest;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisResponse;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.ChatHistoryResponse;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.MetricsResponse;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.entity.DayAnalysis;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.entity.User;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.repository.DayAnalysisRepository;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.repository.UserRepository;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.service.AiAnalysisService;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -262,6 +266,76 @@ public class AnalysisController {
             response.setCurrentStateText(analysis.getCurrentStateText());
             response.setEnergyMomentsText(analysis.getEnergyMomentsText());
             response.setMissingElementText(analysis.getMissingElementText());
+        }
+        
+        return response;
+    }
+    
+    @GetMapping("/metrics")
+    public ResponseEntity<?> getMetrics(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            Authentication authentication) {
+        
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+        
+        try {
+            String userEmail = authentication.getName();
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            // Parse dates or use defaults (last 7 days)
+            ZonedDateTime start;
+            ZonedDateTime end;
+            
+            if (startDate != null && endDate != null) {
+                start = LocalDate.parse(startDate).atStartOfDay(ZoneId.systemDefault());
+                end = LocalDate.parse(endDate).atTime(23, 59, 59).atZone(ZoneId.systemDefault());
+            } else {
+                // Default to last 7 days
+                end = ZonedDateTime.now();
+                start = end.minusDays(7);
+            }
+            
+            // Get analyses within date range
+            List<DayAnalysis> analyses = dayAnalysisRepository
+                    .findByUserAndAnalyzedAtBetweenOrderByAnalyzedAtDesc(user, start, end);
+            
+            // Convert to metrics DTOs
+            List<MetricsResponse> metrics = new ArrayList<>();
+            for (DayAnalysis analysis : analyses) {
+                MetricsResponse metric = convertToMetricsResponse(analysis);
+                metrics.add(metric);
+            }
+            
+            return ResponseEntity.ok(metrics);
+            
+        } catch (Exception e) {
+            logger.error("Error retrieving metrics: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Ошибка при получении метрик: " + e.getMessage()));
+        }
+    }
+    
+    private MetricsResponse convertToMetricsResponse(DayAnalysis analysis) {
+        MetricsResponse response = new MetricsResponse();
+        
+        response.setId(analysis.getId());
+        response.setAnalyzedAt(analysis.getAnalyzedAt());
+        response.setIsCheckin(analysis.getIsCheckin());
+        
+        // Add check-in metrics if available
+        if (Boolean.TRUE.equals(analysis.getIsCheckin())) {
+            response.setCalmnessRating(analysis.getCalmnessRating());
+            response.setEnergyRating(analysis.getEnergyRating());
+            response.setSatisfactionRating(analysis.getSatisfactionRating());
+            response.setConnectionRating(analysis.getConnectionRating());
+            response.setEngagementRating(analysis.getEngagementRating());
+        } else {
+            // Add regular analysis metrics
+            response.setDayRating(analysis.getDayRating());
         }
         
         return response;
