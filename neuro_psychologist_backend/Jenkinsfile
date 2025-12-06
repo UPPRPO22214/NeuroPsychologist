@@ -7,7 +7,20 @@ pipeline {
         AI_API_KEY = credentials('ai-api-key')
         AI_FOLDER_ID = credentials('ai-folder-id')
         AI_KEY_ID = credentials('ai-key-id')
+        
+        // Database Configuration
+        DATABASE_URL = credentials('database-url')
+        DATABASE_USERNAME = credentials('database-username')
+        DATABASE_PASSWORD = credentials('database-password')
+        
+        // JWT Configuration
+        JWT_SECRET = credentials('jwt-secret')
+        
+        // Application Configuration
         SERVER_PORT = '8081'
+        DOCKER_IMAGE_NAME = 'neuroapp'
+        CONTAINER_NAME = 'neuroapp'
+        EXTERNAL_IP = '158.160.203.252'
     }
     
     stages {
@@ -28,6 +41,7 @@ pipeline {
                     sh './mvnw -version'
                 }
                 sh 'echo "Building neuro_psychologist_backend version: 0.0.1-SNAPSHOT"'
+                sh 'docker --version || echo "Docker not available"'
             }
         }
         
@@ -79,38 +93,109 @@ pipeline {
             }
         }
         
-        stage('Deploy Locally') {
+        stage('Build Docker Image') {
             steps {
                 script {
+                    echo 'Building Docker image...'
                     dir('neuro_psychologist_backend') {
-                        sh '''
-                            # Останавливаем и удаляем существующий контейнер если есть
-                            docker stop neuroapp || true
-                            docker rm neuroapp || true
-                            
-                            # Собираем Docker образ
-                            docker build -t neuroapp .
-                            
-                            # Запускаем контейнер
-                            docker run -d --name neuroapp \
-                            -p 8081:8081 \
-                            -e YANDEX_API_KEY=$AI_API_KEY \
-                            -e AI_FOLDER_ID=$AI_FOLDER_ID \
-                            -e AI_KEY_ID=$AI_KEY_ID \
-                            neuroapp
-                        '''
+                        sh """
+                            docker build -t ${DOCKER_IMAGE_NAME}:latest .
+                            docker tag ${DOCKER_IMAGE_NAME}:latest ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}
+                        """
                     }
+                }
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                script {
+                    echo 'Deploying application...'
+                    sh """
+                        # Останавливаем и удаляем существующий контейнер если есть
+                        docker stop ${CONTAINER_NAME} || true
+                        docker rm ${CONTAINER_NAME} || true
+                        
+                        # Запускаем новый контейнер
+                        docker run -d \
+                            --name ${CONTAINER_NAME} \
+                            --restart unless-stopped \
+                            -p ${SERVER_PORT}:${SERVER_PORT} \
+                            -e SERVER_PORT=${SERVER_PORT} \
+                            -e YANDEX_API_KEY=\${AI_API_KEY} \
+                            -e AI_FOLDER_ID=\${AI_FOLDER_ID} \
+                            -e AI_KEY_ID=\${AI_KEY_ID} \
+                            -e DATABASE_URL=\${DATABASE_URL} \
+                            -e DATABASE_USERNAME=\${DATABASE_USERNAME} \
+                            -e DATABASE_PASSWORD=\${DATABASE_PASSWORD} \
+                            -e JWT_SECRET=\${JWT_SECRET} \
+                            -e SPRING_PROFILES_ACTIVE=prod \
+                            ${DOCKER_IMAGE_NAME}:latest
+                        
+                        # Ждем запуска приложения
+                        echo "Waiting for application to start..."
+                        sleep 15
+                        
+                        # Проверяем статус контейнера
+                        docker ps | grep ${CONTAINER_NAME}
+                    """
                 }
             }
             post {
                 success {
                     echo '✅ Application successfully deployed!'
-                    echo '🌐 External URL: http://158.160.203.252:8081'
-                    echo '📊 Health check: http://158.160.203.252:8081/actuator/health'
+                    echo "🌐 External URL: http://${EXTERNAL_IP}:${SERVER_PORT}"
+                    echo "📊 Health check: http://${EXTERNAL_IP}:${SERVER_PORT}/actuator/health"
+                    echo "🔍 API docs: http://${EXTERNAL_IP}:${SERVER_PORT}/swagger-ui.html"
                 }
                 failure {
                     echo '❌ Deployment failed! Check application logs:'
-                    sh 'docker logs neuroapp || echo "No container logs found"'
+                    sh "docker logs ${CONTAINER_NAME} || echo 'No container logs found'"
+                }
+            }
+        }
+        
+        stage('Health Check') {
+            steps {
+                script {
+                    echo 'Performing health check...'
+                    sh """
+                        # Ждем полной инициализации приложения
+                        sleep 10
+                        
+                        # Проверяем health endpoint
+                        for i in {1..10}; do
+                            if curl -f http://localhost:${SERVER_PORT}/actuator/health; then
+                                echo "✅ Health check passed!"
+                                exit 0
+                            fi
+                            echo "Attempt \$i failed, retrying in 5 seconds..."
+                            sleep 5
+                        done
+                        
+                        echo "❌ Health check failed after 10 attempts"
+                        docker logs ${CONTAINER_NAME}
+                        exit 1
+                    """
+                }
+            }
+        }
+        
+        stage('Cleanup Old Images') {
+            steps {
+                script {
+                    echo 'Cleaning up old Docker images...'
+                    sh """
+                        # Удаляем старые образы, оставляя последние 3
+                        docker images ${DOCKER_IMAGE_NAME} --format "{{.ID}} {{.Tag}}" | \
+                        grep -v latest | \
+                        tail -n +4 | \
+                        awk '{print \$1}' | \
+                        xargs -r docker rmi || true
+                        
+                        # Удаляем dangling images
+                        docker image prune -f || true
+                    """
                 }
             }
         }
@@ -119,12 +204,21 @@ pipeline {
     post {
         always {
             echo 'Pipeline execution completed.'
+            sh """
+                echo "=== Container Status ==="
+                docker ps -a | grep ${CONTAINER_NAME} || echo "Container not found"
+                
+                echo "=== Recent Logs ==="
+                docker logs --tail 50 ${CONTAINER_NAME} || echo "No logs available"
+            """
         }
         success {
             echo '✅ Pipeline executed successfully!'
+            echo "🚀 Application is running at http://${EXTERNAL_IP}:${SERVER_PORT}"
         }
         failure {
             echo '❌ Pipeline failed! Check the logs for details.'
+            sh "docker logs ${CONTAINER_NAME} || echo 'No container logs available'"
         }
         unstable {
             echo '⚠️ Pipeline is unstable! Some tests may have failed.'
