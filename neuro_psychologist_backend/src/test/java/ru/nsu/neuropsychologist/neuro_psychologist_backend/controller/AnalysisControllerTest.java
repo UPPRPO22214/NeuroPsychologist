@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisRequest;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AnalysisResponse;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.entity.DayAnalysis;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.entity.User;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.repository.DayAnalysisRepository;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.repository.UserRepository;
@@ -20,6 +21,7 @@ import java.util.Arrays;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,14 +52,19 @@ class AnalysisControllerTest {
                 ZonedDateTime.now()
         );
         
-        when(aiAnalysisService.analyzeUserText("Тестовый текст для анализа"))
+        when(aiAnalysisService.analyzeUserText(any(AnalysisRequest.class)))
                 .thenReturn(mockResponse);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getName()).thenReturn("test@example.com");
         
         User mockUser = new User();
+        mockUser.setId(1);
         mockUser.setEmail("test@example.com");
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(mockUser));
+        
+        DayAnalysis savedAnalysis = new DayAnalysis();
+        savedAnalysis.setId(1L);
+        when(dayAnalysisRepository.save(any(DayAnalysis.class))).thenReturn(savedAnalysis);
 
         // Act
         ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request, authentication);
@@ -68,7 +75,8 @@ class AnalysisControllerTest {
         assertTrue(result.getBody().isSuccess());
         assertEquals(8, result.getBody().getDayRating());
         
-        verify(aiAnalysisService, times(1)).analyzeUserText("Тестовый текст для анализа");
+        verify(aiAnalysisService, times(1)).analyzeUserText(any(AnalysisRequest.class));
+        verify(dayAnalysisRepository, times(1)).save(any(DayAnalysis.class));
     }
 
     @Test
@@ -111,7 +119,7 @@ class AnalysisControllerTest {
         AnalysisRequest request = new AnalysisRequest("Тестовый текст");
         AnalysisResponse mockResponse = new AnalysisResponse("Ошибка сервиса");
         
-        when(aiAnalysisService.analyzeUserText("Тестовый текст"))
+        when(aiAnalysisService.analyzeUserText(any(AnalysisRequest.class)))
                 .thenReturn(mockResponse);
 
         // Act
@@ -123,7 +131,7 @@ class AnalysisControllerTest {
         assertFalse(result.getBody().isSuccess());
         assertEquals("Ошибка сервиса", result.getBody().getError());
         
-        verify(aiAnalysisService, times(1)).analyzeUserText("Тестовый текст");
+        verify(aiAnalysisService, times(1)).analyzeUserText(any(AnalysisRequest.class));
     }
 
 }
