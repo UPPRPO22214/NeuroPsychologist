@@ -57,20 +57,29 @@ pipeline {
             steps {
                 sh '''
                     # Check if AWS CLI is already installed
-                    if ! command -v aws &> /dev/null; then
+                    if command -v aws &> /dev/null; then
+                        echo "AWS CLI already installed at $(which aws)"
+                        aws --version
+                    else
                         echo "Installing AWS CLI..."
                         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
                         unzip -q awscliv2.zip
-                        sudo ./aws/install 2>/dev/null || ./aws/install --install-dir $HOME/.local/aws-cli --bin-dir $HOME/.local/bin
+                        
+                        # Try with sudo first, fall back to local install
+                        if sudo ./aws/install 2>/dev/null; then
+                            echo "AWS CLI installed system-wide"
+                        else
+                            ./aws/install --install-dir $HOME/.local/aws-cli --bin-dir $HOME/.local/bin --update 2>/dev/null || \
+                            ./aws/install --install-dir $HOME/.local/aws-cli --bin-dir $HOME/.local/bin
+                            echo "AWS CLI installed to $HOME/.local/bin"
+                        fi
+                        
                         rm -rf awscliv2.zip aws
-                        echo "AWS CLI installed to $HOME/.local/bin"
-                    else
-                        echo "AWS CLI already installed"
+                        
+                        # Verify installation
+                        export PATH="$HOME/.local/bin:$PATH"
+                        aws --version
                     fi
-                    
-                    # Verify installation
-                    export PATH="$HOME/.local/bin:$PATH"
-                    aws --version
                 '''
             }
         }
