@@ -88,7 +88,11 @@ pipeline {
             steps {
                 dir('neuro_psychologist_frontend') {
                     sh '''
-                        aws s3 sync dist/ s3://${S3_BUCKET} --delete --region ${AWS_REGION}
+                        # Deploy to Yandex Object Storage (S3-compatible)
+                        aws s3 sync dist/ s3://${S3_BUCKET} \
+                            --delete \
+                            --endpoint-url=https://storage.yandexcloud.net \
+                            --region ${AWS_REGION}
                     '''
                 }
             }
