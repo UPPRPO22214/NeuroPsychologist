@@ -25,7 +25,8 @@ const AuthPage: React.FC = () => {
       login(response.token, {
         id: response.id,
         username: response.username,
-        email: response.email
+        email: response.email,
+        firstName: response.firstName
       });
       
       // Redirect to chat page after successful login

@@ -3,10 +3,13 @@ package ru.nsu.neuropsychologist.neuro_psychologist_backend.controller;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AuthResponse;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.LoginRequest;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.RegisterRequest;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.UpdateProfileRequest;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.UserProfileResponse;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.service.AuthService;
 
 import java.util.HashMap;
@@ -44,6 +47,33 @@ public class AuthController {
             Map<String, String> error = new HashMap<>();
             error.put("error", "Invalid email or password");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        }
+    }
+    
+    @GetMapping("/profile")
+    public ResponseEntity<?> getProfile(Authentication authentication) {
+        try {
+            String email = authentication.getName();
+            UserProfileResponse profile = authService.getUserProfile(email);
+            return ResponseEntity.ok(profile);
+        } catch (Exception e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Failed to fetch profile");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+    
+    @PutMapping("/profile")
+    public ResponseEntity<?> updateProfile(@Valid @RequestBody UpdateProfileRequest request,
+                                          Authentication authentication) {
+        try {
+            String email = authentication.getName();
+            UserProfileResponse profile = authService.updateProfile(email, request);
+            return ResponseEntity.ok(profile);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
     }
 }

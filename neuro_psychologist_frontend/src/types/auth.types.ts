@@ -22,3 +22,15 @@ export interface AuthResponse {
 export interface ErrorResponse {
   error: string;
 }
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  firstName: string;
+}
+
+export interface UpdateProfileRequest {
+  firstName: string;
+  newPassword?: string;
+  currentPassword: string;
+}

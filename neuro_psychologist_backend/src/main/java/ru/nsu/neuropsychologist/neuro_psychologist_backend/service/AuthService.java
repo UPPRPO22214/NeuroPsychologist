@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.AuthResponse;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.LoginRequest;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.RegisterRequest;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.UpdateProfileRequest;
+import ru.nsu.neuropsychologist.neuro_psychologist_backend.dto.UserProfileResponse;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.entity.User;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.repository.UserRepository;
 import ru.nsu.neuropsychologist.neuro_psychologist_backend.security.JwtUtil;
@@ -84,6 +86,45 @@ public class AuthService implements UserDetailsService {
                 user.getEmail(),
                 user.getFirstName(),
                 user.getId()
+        );
+    }
+    
+    public UserProfileResponse getUserProfile(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        
+        return new UserProfileResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getFirstName()
+        );
+    }
+    
+    public UserProfileResponse updateProfile(String email, UpdateProfileRequest request) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        
+        // Verify current password
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new RuntimeException("Current password is incorrect");
+        }
+        
+        // Update first name
+        if (request.getFirstName() != null && !request.getFirstName().trim().isEmpty()) {
+            user.setFirstName(request.getFirstName().trim());
+        }
+        
+        // Update password if provided
+        if (request.getNewPassword() != null && !request.getNewPassword().trim().isEmpty()) {
+            user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        }
+        
+        User updatedUser = userRepository.save(user);
+        
+        return new UserProfileResponse(
+                updatedUser.getId(),
+                updatedUser.getEmail(),
+                updatedUser.getFirstName()
         );
     }
 }

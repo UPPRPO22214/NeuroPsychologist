@@ -1,4 +1,4 @@
-import type { LoginRequest, RegisterRequest, AuthResponse, ErrorResponse } from '../types/auth.types';
+import type { LoginRequest, RegisterRequest, AuthResponse, ErrorResponse, UpdateProfileRequest, UserProfile } from '../types/auth.types';
 
 const API_BASE_URL = 'http://localhost:8080/api/auth';
 
@@ -51,5 +51,50 @@ export class AuthService {
 
   static isAuthenticated(): boolean {
     return !!this.getToken();
+  }
+
+  static async getProfile(): Promise<UserProfile> {
+    const token = this.getToken();
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/profile`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error: ErrorResponse = await response.json();
+      throw new Error(error.error || 'Failed to fetch profile');
+    }
+
+    return response.json();
+  }
+
+  static async updateProfile(data: UpdateProfileRequest): Promise<UserProfile> {
+    const token = this.getToken();
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error: ErrorResponse = await response.json();
+      throw new Error(error.error || 'Failed to update profile');
+    }
+
+    return response.json();
   }
 }
