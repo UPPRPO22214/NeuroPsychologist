@@ -50,7 +50,7 @@ class AnalysisControllerTest {
                 ZonedDateTime.now()
         );
         
-        when(aiAnalysisService.analyzeUserText("Тестовый текст для анализа"))
+        when(aiAnalysisService.analyzeUserText(any(AnalysisRequest.class)))
                 .thenReturn(mockResponse);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getName()).thenReturn("test@example.com");
@@ -68,7 +68,7 @@ class AnalysisControllerTest {
         assertTrue(result.getBody().isSuccess());
         assertEquals(8, result.getBody().getDayRating());
         
-        verify(aiAnalysisService, times(1)).analyzeUserText("Тестовый текст для анализа");
+        verify(aiAnalysisService, times(1)).analyzeUserText(any(AnalysisRequest.class));
     }
 
     @Test
@@ -112,7 +112,7 @@ class AnalysisControllerTest {
         AnalysisResponse mockResponse = new AnalysisResponse("Ошибка сервиса");
         
         when(authentication.isAuthenticated()).thenReturn(false);
-        when(aiAnalysisService.analyzeUserText("Тестовый текст"))
+        when(aiAnalysisService.analyzeUserText(any(AnalysisRequest.class)))
                 .thenReturn(mockResponse);
 
         // Act
@@ -124,7 +124,7 @@ class AnalysisControllerTest {
         assertFalse(result.getBody().isSuccess());
         assertEquals("Ошибка сервиса", result.getBody().getError());
         
-        verify(aiAnalysisService, times(1)).analyzeUserText("Тестовый текст");
+        verify(aiAnalysisService, times(1)).analyzeUserText(any(AnalysisRequest.class));
     }
 
 }
