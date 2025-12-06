@@ -1,0 +1,51 @@
+/* Analytics Page Styles */
+
+.analytics-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Date picker custom styles */
+input[type="date"] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.5);
+}
+
+/* Progress bar animation */
+.progress-bar-fill {
+  transition: width 0.5s ease-in-out;
+}
+
+/* Card hover effects */
+.metric-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .analytics-container {
+    padding: 1rem;
+  }
+}

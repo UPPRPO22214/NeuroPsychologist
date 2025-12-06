@@ -5,6 +5,7 @@ import AuthPage from '../pages/authorization-page';
 import RegistrationPage from '../pages/registration-page';
 import ChatPage from '../pages/chat-page';
 import ChatHistoryPage from '../pages/chat-history-page';
+import AnalyticsPage from '../pages/analytics-page';
 import ProtectedRoute from './ProtectedRoute';
 
 const AppRouter: React.FC = () => {
@@ -27,6 +28,14 @@ const AppRouter: React.FC = () => {
           element={
             <ProtectedRoute>
               <ChatHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <ProtectedRoute>
+              <AnalyticsPage />
             </ProtectedRoute>
           }
         />
