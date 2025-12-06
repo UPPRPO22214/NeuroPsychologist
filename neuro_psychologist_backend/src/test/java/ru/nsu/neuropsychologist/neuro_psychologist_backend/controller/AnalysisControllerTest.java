@@ -111,11 +111,12 @@ class AnalysisControllerTest {
         AnalysisRequest request = new AnalysisRequest("Тестовый текст");
         AnalysisResponse mockResponse = new AnalysisResponse("Ошибка сервиса");
         
+        when(authentication.isAuthenticated()).thenReturn(false);
         when(aiAnalysisService.analyzeUserText("Тестовый текст"))
                 .thenReturn(mockResponse);
 
         // Act
-        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request, null);
+        ResponseEntity<AnalysisResponse> result = analysisController.analyzeText(request, authentication);
 
         // Assert
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, result.getStatusCode());
