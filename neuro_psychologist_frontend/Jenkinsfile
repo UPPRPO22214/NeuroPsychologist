@@ -25,7 +25,19 @@ pipeline {
                     sh '''
                         node --version
                         npm --version
+                        
+                        # Force npm to use official registry
                         npm config set registry https://registry.npmjs.org/
+                        npm config set strict-ssl true
+                        
+                        # Remove package-lock.json if it contains wrong registry references
+                        if grep -q "yandex" package-lock.json 2>/dev/null; then
+                            echo "Detected Yandex registry in package-lock.json, removing it..."
+                            rm -f package-lock.json
+                            npm install --package-lock-only
+                        fi
+                        
+                        # Install dependencies
                         npm ci
                     '''
                 }
