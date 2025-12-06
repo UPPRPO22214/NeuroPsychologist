@@ -99,10 +99,10 @@ const Header: React.FC<HeaderProps> = ({
                                 }}
                             >
                                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--surface-primary)' }}>
-                                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                        {user?.username || 'User'}
+                                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                                        {user?.firstName || user?.username || 'Пользователь'}
                                     </div>
-                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                                         {user?.email}
                                     </div>
                                 </div>
@@ -196,7 +196,7 @@ const Header: React.FC<HeaderProps> = ({
                                 
                                 <button
                                     onClick={() => {
-                                        navigate('/settings');
+                                        navigate('/profile');
                                         setShowDropdown(false);
                                     }}
                                     style={{

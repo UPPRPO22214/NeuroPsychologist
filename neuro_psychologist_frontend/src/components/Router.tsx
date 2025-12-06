@@ -6,6 +6,7 @@ import RegistrationPage from '../pages/registration-page';
 import ChatPage from '../pages/chat-page';
 import ChatHistoryPage from '../pages/chat-history-page';
 import AnalyticsPage from '../pages/analytics-page';
+import ProfilePage from '../pages/profile-page';
 import ProtectedRoute from './ProtectedRoute';
 
 const AppRouter: React.FC = () => {
@@ -36,6 +37,14 @@ const AppRouter: React.FC = () => {
           element={
             <ProtectedRoute>
               <AnalyticsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           }
         />
