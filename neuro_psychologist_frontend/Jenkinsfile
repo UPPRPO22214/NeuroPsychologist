@@ -1,12 +1,16 @@
 pipeline {
     agent any
     
+    tools {
+        nodejs 'NodeJS 20'
+    }
+    
     environment {
-        NODE_VERSION = '20'
         S3_BUCKET = credentials('S3_BUCKET_NAME')
         AWS_REGION = credentials('AWS_REGION')
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        PATH = "${env.HOME}/.local/bin:${env.PATH}"
     }
     
     stages {
@@ -18,10 +22,23 @@ pipeline {
         
         stage('Install Dependencies') {
             steps {
-                script {
+                dir('neuro_psychologist_frontend') {
                     sh '''
                         node --version
                         npm --version
+                        
+                        # Force npm to use official registry
+                        npm config set registry https://registry.npmjs.org/
+                        npm config set strict-ssl true
+                        
+                        # Remove package-lock.json if it contains wrong registry references
+                        if grep -q "yandex" package-lock.json 2>/dev/null; then
+                            echo "Detected Yandex registry in package-lock.json, removing it..."
+                            rm -f package-lock.json
+                            npm install --package-lock-only
+                        fi
+                        
+                        # Install dependencies
                         npm ci
                     '''
                 }
@@ -30,17 +47,52 @@ pipeline {
         
         stage('Build') {
             steps {
-                script {
+                dir('neuro_psychologist_frontend') {
                     sh 'npm run build'
                 }
             }
         }
         
+        stage('Install AWS CLI') {
+            steps {
+                sh '''
+                    # Check if AWS CLI is already installed
+                    if command -v aws &> /dev/null; then
+                        echo "AWS CLI already installed at $(which aws)"
+                        aws --version
+                    else
+                        echo "Installing AWS CLI..."
+                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                        unzip -q awscliv2.zip
+                        
+                        # Try with sudo first, fall back to local install
+                        if sudo ./aws/install 2>/dev/null; then
+                            echo "AWS CLI installed system-wide"
+                        else
+                            ./aws/install --install-dir $HOME/.local/aws-cli --bin-dir $HOME/.local/bin --update 2>/dev/null || \
+                            ./aws/install --install-dir $HOME/.local/aws-cli --bin-dir $HOME/.local/bin
+                            echo "AWS CLI installed to $HOME/.local/bin"
+                        fi
+                        
+                        rm -rf awscliv2.zip aws
+                        
+                        # Verify installation
+                        export PATH="$HOME/.local/bin:$PATH"
+                        aws --version
+                    fi
+                '''
+            }
+        }
+        
         stage('Deploy to S3') {
             steps {
-                script {
+                dir('neuro_psychologist_frontend') {
                     sh '''
-                        aws s3 sync dist/ s3://${S3_BUCKET} --delete --region ${AWS_REGION}
+                        # Deploy to Yandex Object Storage (S3-compatible)
+                        aws s3 sync dist/ s3://${S3_BUCKET} \
+                            --delete \
+                            --endpoint-url=https://storage.yandexcloud.net \
+                            --region ${AWS_REGION}
                     '''
                 }
             }
